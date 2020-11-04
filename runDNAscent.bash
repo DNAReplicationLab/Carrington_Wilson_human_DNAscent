@@ -5,11 +5,12 @@
 
 #Usage: bash runDNAscent.bash -f </path/to/fast5/files> -o </folder/to/save/run/analysis> [optional: -g -k -d <detect threshold> -n <output name> ] [optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
 
-#If using forksense run in -o directory and use -o ./ otherwise forkSense throws error (needs relative path for -o and see below, needs running in pwd).
+#If using forksense run in -o directory as origin and termination bed files are saved to pwd not </folder/to/save/run/analysis>.
+# Can use absolute or relative paths.
 
 #optional:
 # -g to do basecalling and mapping, default is off, if off requires indexed bam file called alignments.sorted, and sequencing_summary.txt to be present in -o </folder/to/save/run/analysis>. Make sure -o </folder/to/save/run/analysis> doesn't contain any files/folders that could be overwritten eg logfiles/ and bedgraphs/.
-# -k to use forkSense, default off, NB forkSense has a bug, will output origin and termination bed files to pwd rather than $SAVEPATH
+# -k to use forkSense, default off
 # -d default is 1000, the minimum for dnascent detect
 # -n default is output, suggested to use if using -L or -s
 # -L to generate bam for defined genomic regions and use this bam for dnascent (-L flag in samtools view)
