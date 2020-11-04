@@ -36,7 +36,7 @@ while [ "$1" != "" ]; do
 done
 
 # extend region if -w
-if [ WIDE != 0 ]; then
+if [ "$WIDE" != 0 ]; then
 	echo
 	echo "Region will be extended by $WIDE each side."
 	START=$(expr "$START" - "$WIDE")
