@@ -1,5 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=BWA_MEMmap
+
+#SBATCH --job-name=BWA_map
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem-per-cpu=1
@@ -7,11 +8,20 @@
 #SBATCH --output=/data/nieduszynski/NGS/2020_07_08_JC_RW_ILL_HeLa_BrdU_lowchases/bwa/bwa_out.%j
 #SBATCH --error=/data/nieduszynski/NGS/2020_07_08_JC_RW_ILL_HeLa_BrdU_lowchases/bwa/bwa_err.%j
 
-#usage sbatch bwa_map.bash <samples.txt> NB <samples.txt> should have stem of the filename with no extension
+# usage sbatch bwa_map.bash <samples.txt> NB <samples.txt> should have stem of the filename with no extension
 
-#should be used with samtools version 1.10, module load SAMTOOLS/1.10
-#if default samtools already loaded, module unload SAMTOOLS, module load SAMTOOLS/1.10
-#to use with older versions of samtools remove -M flag in 2nd samtools view command, and for samtools markdups command replace -f flag (and associated filename to save stats to) with -s, stats will be printed to screen.
+# set environment variable for location of bowtie indexes on the server
+#export BOWTIE2_INDEXES="/data/nieduszynski/RESOURCES/REFERENCE_GENOMES"
+# load required modules and set variables
+module load SLURM/5.08.6
+module load BWA/0.7.12 && BWA="bwa"
+module unload SAMTOOLS
+module load SAMTOOLS/1.10 && SAMTOOLS="samtools"
+module load PICARDTOOLS/6.15 && PICARDTOOLS="/software/BIOINFORMATICS/PICARDTOOLS/picard-06.15/dist/picard.jar"
+module load BEDTOOLS/2.26.0 && BEDTOOLS="bedtools"
+echo "Required modules are loaded"
+
+# requires SAMTOOLS/1.10 to use -M flag for samtools view. To use with older versions, remove -M flag from samtools view command, and for samtools markdups command replace -f flag (and associated filename to save stats to) with -s, stats will be printed to screen.
 
 #For use on barcode trimmed file in trim/ directory wihin run directory, run script in bwa/ directory under run directory
 
