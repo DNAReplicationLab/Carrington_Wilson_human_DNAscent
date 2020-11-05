@@ -30,18 +30,18 @@ do
 echo $file
 
 #map trimmed reads to specified human reference genome (no alt version) using bwa-mem, sort and save as a bam file
-bwa mem -M -t 16 /data/nieduszynski/RESOURCES/REFERENCE_GENOMES/STAR/ncbi-noALT-2020_03_17/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna ../trim/$file.fastq.gz | samtools sort -@ 15 -o $file.bwa.sorted.bam -
+"$BWA" mem -M -t 16 /data/nieduszynski/RESOURCES/REFERENCE_GENOMES/STAR/ncbi-noALT-2020_03_17/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna ../trim/$file.fastq.gz | "$SAMTOOLS" sort -@ 15 -o $file.bwa.sorted.bam -
 echo $file.bwa.sorted.bam saved
 echo ""
 
 #index the bam file, print mapping stats to <sample>.mappingStats.txt file
-samtools index $file.bwa.sorted.bam
+"$SAMTOOLS" index $file.bwa.sorted.bam
 touch $file.mappingStats.txt
-samtools flagstat $file.bwa.sorted.bam > $file.mappingStats.txt
+"$SAMTOOLS" flagstat $file.bwa.sorted.bam > $file.mappingStats.txt
 echo "uniquely mapped reads " >> $file.mappingStats.txt
-samtools view -h -@ 15 -F 3844 -q 1 $file.bwa.sorted.bam | grep -v -E "SA:Z:|XA:Z:" | wc -l >> $file.mappingStats.txt
+"$SAMTOOLS" view -h -@ 15 -F 3844 -q 1 $file.bwa.sorted.bam | grep -v -E "SA:Z:|XA:Z:" | wc -l >> $file.mappingStats.txt
 
 #select uniquely mapping reads, mark and remove duplicaes (duplicate stats saved in <sample>.markdups.txt file, generate genome coverage for the 5' end of reads, keep only bases with >= 1 read mapping there and save as a bed file.
-samtools view -h -@ 15 -F 3844 -q 1 -M -L /data/nieduszynski/NGS/2020_03_04_ILL_RW_HeLa_Chases/genomeWindows/hg38_10kbWindows.bed $file.bwa.sorted.bam | grep -v -E "SA:Z:|XA:Z:" | samtools view -@ 15 -b - | samtools markdup -r -f $file.markdups.txt - - | bedtools genomecov -5 -d -ibam stdin | awk 'BEGIN {OFS="\t"} {if ($3>0) print $1,$2,$2,"name",$3}' > $file.coverage.bed
+"$SAMTOOLS" view -h -@ 15 -F 3844 -q 1 -M -L /data/nieduszynski/NGS/2020_03_04_ILL_RW_HeLa_Chases/genomeWindows/hg38_10kbWindows.bed $file.bwa.sorted.bam | grep -v -E "SA:Z:|XA:Z:" | "$SAMTOOLS" view -@ 15 -b - | "$SAMTOOLS" markdup -r -f $file.markdups.txt - - | "$BEDTOOLS" genomecov -5 -d -ibam stdin | awk 'BEGIN {OFS="\t"} {if ($3>0) print $1,$2,$2,"name",$3}' > $file.coverage.bed
 echo $file.coverage.bed saved
 done
