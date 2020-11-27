@@ -56,19 +56,19 @@ echo "$SAMPLE"
 echo
 
 #map trimmed reads to specified human reference genome (no alt version) using bwa-mem, sort and save as a bam file
-"$BWA" mem -M -t 16 "$GENOME" "$FASTQ""$SAMPLE".trim.fastq.gz | "$SAMTOOLS" sort -@ 15 -o "$SAVEPATH""$SAMPLE".bwa.sorted.bam -
+bwa mem -M -t 16 "$GENOME" "$FASTQ""$SAMPLE".trim.fastq.gz | samtools sort -@ 15 -o "$SAVEPATH""$SAMPLE".bwa.sorted.bam -
 echo "$SAMPLE".bwa.sorted.bam saved
 echo
 
 #index the bam file, print mapping stats to <$SAMPLE>.mappingStats.txt file
-"$SAMTOOLS" index "$SAVEPATH""$SAMPLE".bwa.sorted.bam
+samtools index "$SAVEPATH""$SAMPLE".bwa.sorted.bam
 touch "$SAVEPATH""$SAMPLE".mappingStats.txt
-"$SAMTOOLS" flagstat "$SAVEPATH""$SAMPLE".bwa.sorted.bam > "$SAVEPATH""$SAMPLE".mappingStats.txt
+samtools flagstat "$SAVEPATH""$SAMPLE".bwa.sorted.bam > "$SAVEPATH""$SAMPLE".mappingStats.txt
 echo "uniquely mapped reads " >> "$SAVEPATH""$SAMPLE".mappingStats.txt
-"$SAMTOOLS" view -h -@ 15 -F 3844 -q 1 "$SAVEPATH""$SAMPLE".bwa.sorted.bam | grep -v -E "SA:Z:|XA:Z:" | wc -l >> "$SAVEPATH""$SAMPLE".mappingStats.txt
+samtools view -h -@ 15 -F 3844 -q 1 "$SAVEPATH""$SAMPLE".bwa.sorted.bam | grep -v -E "SA:Z:|XA:Z:" | wc -l >> "$SAVEPATH""$SAMPLE".mappingStats.txt
 
 #select uniquely mapping reads, mark and remove duplicaes (duplicate stats saved in <sample>.markdups.txt file, generate genome coverage for the 5' end of reads, keep only bases with >= 1 read mapping there and save as a bed file.
-"$SAMTOOLS" view -h -@ 15 -F 3844 -q 1 -M -L "$INCLUDE" "$SAVEPATH""$SAMPLE".bwa.sorted.bam | grep -v -E "SA:Z:|XA:Z:" | "$SAMTOOLS" view -@ 15 -b - | "$SAMTOOLS" markdup -r -f "$SAVEPATH""$SAMPLE".markdups.txt - - | "$BEDTOOLS" genomecov -5 -d -ibam stdin | awk 'BEGIN {OFS="\t"} {if ($3>0) print $1,$2,$2,"name",$3}' > "$SAVEPATH""$SAMPLE".coverage.bed
+samtools view -h -@ 15 -F 3844 -q 1 -M -L "$INCLUDE" "$SAVEPATH""$SAMPLE".bwa.sorted.bam | grep -v -E "SA:Z:|XA:Z:" | samtools view -@ 15 -b - | samtools markdup -r -f "$SAVEPATH""$SAMPLE".markdups.txt - - | bedtools genomecov -5 -d -ibam stdin | awk 'BEGIN {OFS="\t"} {if ($3>0) print $1,$2,$2,"name",$3}' > "$SAVEPATH""$SAMPLE".coverage.bed
 echo "$SAMPLE".coverage.bed saved
 echo
 done
