@@ -3,16 +3,18 @@
 #Purpose: to process fast5 (or bam) files from nanopore run through to the end of DNAscent.
 #Before you start create a folder where you would like to save run analysis, this will be </folder/to/save/run/analysis>
 
-#Usage: bash runDNAscent.bash -f </path/to/fast5/files> -o </folder/to/save/run/analysis> [optional: -g -k -d <detect threshold> -n <output name> ] [optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
+#Usage: bash runDNAscent.bash -f </path/to/fast5/files> -r </path/to/save/whole/run/files> -o <name for ouput directory> [optional: -g -k -d <detect threshold> -n <output name> ] [optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
 
-#If using forksense run in -o directory as origin and termination bed files are saved to pwd not </folder/to/save/run/analysis>.
+#If using forksense run in -r directory as there was a bug (now fixed?) that origin and termination bed files are saved to pwd then move to -o.
 # Can use absolute or relative paths.
 
 #optional:
-# -g to do basecalling and mapping, default is off, if off requires indexed bam file called alignments.sorted, and sequencing_summary.txt to be present in -o </folder/to/save/run/analysis>. Make sure -o </folder/to/save/run/analysis> doesn't contain any files/folders that could be overwritten eg logfiles/ and bedgraphs/.
+# -g to do basecalling and mapping, default is off, if off requires indexed bam file called alignments.sorted, and sequencing_summary.txt to be present in -r </path/to/save/run/files>. Make sure -r doesn't contain any files/folders that could be overwritten.
+# -r fastq files, sequencing summary and indexed bam of whole run saved here
+# -o create and populate folder with any filtered indexed bam files, DNAscent detect and forkSense files so that you can reanalyse reads with different parameters without overwriting eg whole run or just specific chromosomes
 # -k to use forkSense, default off
-# -d default is 1000, the minimum for dnascent detect
-# -n default is output, suggested to use if using -L or -s
+# -d default is 1000, same as default for dnascent detect
+# -n default is output, suggested to use other name especially if using -L or -s
 # -L to generate bam for defined genomic regions and use this bam for dnascent (-L flag in samtools view)
 # -s to generate subsampled bam and use this bam for dnascent (-s flag in samtools view)
 
@@ -32,8 +34,10 @@ while [ "$1" != "" ]; do
 	case $1 in
 		-f )	shift
 			FAST5="$1" ;;
+		-r )	shift
+			RUNPATH="$1" ;;
 		-o )	shift
-			SAVEPATH="$1" ;;
+			SAVEDIR="$1" ;;
 		-g )	BASECALL="TRUE" ;;
 		-k )	FORKSENSE="TRUE" ;;
 		-d )	shift
@@ -50,9 +54,9 @@ done
 
 
 if [ "$REGION" != "FALSE" ] || [ "$SUBSAMPLE" != "FALSE" ]; then
-	BAM="$SAVEPATH""$NAME".bam
+	BAM="$RUNPATH""$SAVEDIR"/"$NAME".bam
 	else
-	BAM="$SAVEPATH"alignments.sorted
+	BAM="$RUNPATH"alignments.sorted
 fi
 
 #print variables to check
@@ -60,7 +64,8 @@ fi
 echo BASECALL = $BASECALL
 echo FORKSENSE = $FORKSENSE
 echo FAST5 = $FAST5
-echo SAVEPATH = $SAVEPATH
+echo RUNPATH = $RUNPATH
+echo SAVEDIR = $SAVEDIR
 echo DETECTTHRESHOLD = $DETECTTHRESHOLD
 echo NAME = $NAME
 echo REGION = $REGION
@@ -69,72 +74,74 @@ echo "BAM to use for detect" = $BAM
 
 #make folders and files
 
-mkdir "$SAVEPATH"logfiles
-touch "$SAVEPATH"logfiles/index_output.txt "$SAVEPATH"logfiles/detect_output.txt "$SAVEPATH"logfiles/bedgraph_output.txt
+mkdir "$RUNPATH""$SAVEDIR"
+mkdir "$RUNPATH""$SAVEDIR"/logfiles
+touch "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt "$RUNPATH""$SAVEDIR"/logfiles/bedgraph_output.txt
 
 #optional basecalling (guppy) and mapping (minimap) if starting from fast5 files
 if [ "$BASECALL" != "FALSE" ]; then
-	touch "$SAVEPATH"logfiles/guppy_output.txt "$SAVEPATH"logfiles/minimap_output.txt
+	mkdir "$RUNPATH""$SAVEDIR"/logfiles/guppy_logfiles
+	touch "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt
 
 	#use guppy to basecall fast5 files to generate fastq files, StdOut saved to guppy_ouput.txt
-	/data/software_local/ont-guppy/bin/guppy_basecaller -i "$FAST5" -s "$SAVEPATH" -c /data/software_local/ont-guppy/data/dna_r9.4.1_450bps_fast.cfg -r -x 'cuda:0' > "$SAVEPATH"logfiles/guppy_output.txt
+	/data/software_local/ont-guppy/bin/guppy_basecaller -i "$FAST5" -s "$RUNPATH" -c /data/software_local/ont-guppy/data/dna_r9.4.1_450bps_fast.cfg -r -x 'cuda:0' > "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt
 
 	#tidy output
-	mkdir "$SAVEPATH"fastq_files
-	mv "$SAVEPATH"*.log "$SAVEPATH"logfiles/
-	mv "$SAVEPATH"*.fastq "$SAVEPATH"fastq_files
-	cat "$SAVEPATH"fastq_files/*.fastq > "$SAVEPATH"reads.fastq
+	mkdir "$RUNPATH"fastq_files
+	mv "$RUNPATH"*.log "$RUNPATH""$SAVEDIR"/logfiles/guppy_logfiles
+	mv "$RUNPATH"*.fastq "$RUNPATH"fastq_files
+	cat "$RUNPATH"fastq_files/*.fastq > "$RUNPATH"reads.fastq
 
 	echo
-	echo "$SAVEPATH" fastq files generated and tidied.
+	echo "$RUNPATH" fastq files generated and tidied.
 	echo
 
 	#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
-	/data/software_local/minimap2-2.10/minimap2 -ax map-ont -t 50 /data/workspace/rose/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna "$SAVEPATH"reads.fastq 2> "$SAVEPATH"logfiles/minimap_output.txt | samtools view -Sb - | samtools sort - -o "$SAVEPATH"alignments.sorted
+	/data/software_local/minimap2-2.10/minimap2 -ax map-ont -t 50 /data/workspace/rose/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna "$RUNPATH"reads.fastq 2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt | samtools view -Sb - | samtools sort - -o "$RUNPATH"alignments.sorted
 
-	samtools index "$SAVEPATH"alignments.sorted
+	samtools index "$RUNPATH"alignments.sorted
 
 	echo
-	echo "$SAVEPATH" reads mapped to reference.
+	echo "$RUNPATH" reads mapped to reference.
 	echo
 fi
 
-#if you want to make a smaller bam to perform DNAscent on either specific regions or a subsampke of full bam, provide arguments -L (bed file with list of regions to keep) or -s (INT.FRAC for samtools view -s subsample flag), don't use together, also provide -n <name>
+#if you want to make a smaller bam to perform DNAscent on either specific regions or a subsample of full bam, provide arguments -L (bed file with list of regions to keep) or -s (INT.FRAC for samtools view -s subsample flag), don't use together, also provide -n <name>
 
 if [ "$REGION" != "FALSE" ]; then
-	samtools view -h -b -M -L "$REGION" -o "$SAVEPATH""$NAME".bam "$SAVEPATH"alignments.sorted
-	samtools index "$SAVEPATH""$NAME".bam
+	samtools view -h -b -M -L "$REGION" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
+	samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
 	elif [ "$SUBSAMPLE" != "FALSE" ]; then
-	samtools view -h -b -s "$SUBSAMPLE" -o "$SAVEPATH""$NAME".bam "$SAVEPATH"alignments.sorted
-        samtools index "$SAVEPATH""$NAME".bam
+	samtools view -h -b -s "$SUBSAMPLE" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
+        samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
 fi
 
 #run DNAscent 2.0 index and detect. StdErr saved to detect_output.txt. If you chose to make a smaller region bam then DNAscent uses this bam.
 echo "DNAscent index"
-/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/DNAscent index -f "$FAST5" -s "$SAVEPATH"sequencing_summary.txt -o "$SAVEPATH"index.dnascent 2> "$SAVEPATH"logfiles/index_output.txt
+/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/DNAscent index -f "$FAST5" -s "$RUNPATH"sequencing_summary.txt -o "$RUNPATH"index.dnascent 2> "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt
 echo "DNAscent detect"
-/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/DNAscent detect -b "$BAM" -r /data/workspace/rose/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna -i "$SAVEPATH"index.dnascent -o "$SAVEPATH""$NAME".detect -t 50 --GPU 0 -l "$DETECTTHRESHOLD" 2> "$SAVEPATH"logfiles/detect_output.txt
+/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/DNAscent detect -b "$BAM" -r /data/workspace/rose/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna -i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$NAME".detect -t 50 --GPU 0 -l "$DETECTTHRESHOLD" 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt
 
 echo
-echo "$SAVEPATH" detect complete.
+echo "$RUNPATH""$SAVEDIR" detect complete.
 echo
 
 #optional (-f) run DNAscent 2.0 forksense , StdErr saved to forkSense_output.txt
 if [ "$FORKSENSE" != "FALSE" ]; then
-	touch "$SAVEPATH"logfiles/forkSense_output.txt
+	touch "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
 	echo "DNAscent forkSense"
-	/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/DNAscent forkSense -d "$SAVEPATH""$NAME".detect -o "$SAVEPATH""$NAME".forkSense --markOrigins --markTerminations 2> "$SAVEPATH"logfiles/forkSense_output.txt
-	echo "$SAVEPATH" forksense complete.
+	/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".forkSense --markOrigins --markTerminations 2> "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
+	echo "$RUNPATH""$SAVEDIR" forksense complete.
 
 	#Convert detect and forkSense files to bedgraphs, StdErr saved to bedgraph_output.txt
 	echo "make bedgraphs"
-	python /home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils/dnascent2bedgraph.py -d "$SAVEPATH""$NAME".detect -f "$SAVEPATH""$NAME".forkSense -o "$SAVEPATH"bedgraphs/ 2> "$SAVEPATH"logfiles/bedgraph_output.txt
+	python /home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense -o "$RUNPATH""$SAVEDIR"/bedgraphs/ 2> "$RUNPATH"/"$SAVEDIR"/logfiles/bedgraph_output.txt
 	else
 	#Just convert detect file to bedgraphs
 	echo "make bedgraphs"
-	python /home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils/dnascent2bedgraph.py -d "$SAVEPATH""$NAME".detect -o "$SAVEPATH"bedgraphs/ 2> "$SAVEPATH"logfiles/bedgraph_output.txt
+	python /home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/bedgraphs/ 2> "$RUNPATH""$SAVEDIR"/logfiles/bedgraph_output.txt
 fi
 
 echo
-echo "$SAVEPATH" bedgraphs saved.
+echo "$RUNPATH""$SAVEDIR" bedgraphs saved.
 echo
