@@ -3,7 +3,7 @@
 # This script generates run metrics for a run ie number of reads meeting filtering criterio and on target, also coverage in target regions.
 
 # Useage bash RunMetrics.bash <Name of run> </path/to/bam> </path/to/region/bed/file>
-# paths can be absolute or relative.
+# Use in run folder, requires bam of alignments and ROIbedgraphs folder with bedgraphs for each region in $REGION.bedgraphs subfolders.
 
 # Collect argumetns from the command line
 
@@ -44,4 +44,9 @@ while read -r CHR START END REGION; do
 	       	print (count[(NR / 2)] + count[(NR / 2) + 1]) / 2.0; }
 	}  ' >> "$RUN".RunMetrics.txt
 	echo >> "$RUN".RunMetrics.txt
+
+	echo "Number of bedgraphs >=20kb" >> "$RUN".RunMetrics.txt
+	ls ROIbedgraphs/"$REGION".bedgraphs/ | grep "detect.bedgraph" | wc -l >> "$RUN".RunMetrics.txt
+	echo >> "$RUN".RunMetrics.txt
+
 done < "$REGIONS"
