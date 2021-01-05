@@ -65,7 +65,7 @@ samtools index "$SAVEPATH""$SAMPLE".bwa.sorted.bam
 touch "$SAVEPATH""$SAMPLE".mappingStats.txt
 samtools flagstat "$SAVEPATH""$SAMPLE".bwa.sorted.bam > "$SAVEPATH""$SAMPLE".mappingStats.txt
 echo "uniquely mapped reads " >> "$SAVEPATH""$SAMPLE".mappingStats.txt
-samtools view -h -@ 15 -F 3844 -q 1 "$SAVEPATH""$SAMPLE".bwa.sorted.bam | grep -v -E "SA:Z:|XA:Z:" | wc -l >> "$SAVEPATH""$SAMPLE".mappingStats.txt
+samtools view -@ 15 -F 3844 -q 1 "$SAVEPATH""$SAMPLE".bwa.sorted.bam | grep -v -E "SA:Z:|XA:Z:" | wc -l >> "$SAVEPATH""$SAMPLE".mappingStats.txt
 
 #select uniquely mapping reads, mark and remove duplicaes (duplicate stats saved in <sample>.markdups.txt file, generate genome coverage for the 5' end of reads, keep only bases with >= 1 read mapping there and save as a bed file.
 samtools view -h -@ 15 -F 3844 -q 1 -M -L "$INCLUDE" "$SAVEPATH""$SAMPLE".bwa.sorted.bam | grep -v -E "SA:Z:|XA:Z:" | samtools view -@ 15 -b - | samtools markdup -r -f "$SAVEPATH""$SAMPLE".markdups.txt - - | bedtools genomecov -5 -d -ibam stdin | awk 'BEGIN {OFS="\t"} {if ($3>0) print $1,$2,$2,"name",$3}' > "$SAVEPATH""$SAMPLE".coverage.bed
