@@ -1,18 +1,18 @@
 #!/bin/bash
 
-#Purpose: to process fast5 (or bam) files from nanopore run through to the end of DNAscent.
-#Before you start create a folder where you would like to save run analysis, this will be </folder/to/save/run/analysis>
+# Purpose: to process fast5 (or bam) files from nanopore run through to the end of DNAscent.
+# Before you start create a folder where you would like to save whole run files (-a below), this will be </folder/to/save/run/files>
 
-#Usage: bash runDNAscent.bash -f </path/to/fast5/files> -r </path/to/save/whole/run/files> -o <name for ouput directory> [ optional: -g | -m ] [ optional: -q </path/to/fastq> -k -d <detect threshold> -n <output name> ] [optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
+# Usage: bash runDNAscent.bash -f </path/to/fast5/files> -a </path/to/save/whole/run/files> -o <name for ouput directory> -r </path/to/reference/genome> [ optional: -g | -m ] [ optional: -q </path/to/fastq> -k -d <detect threshold> -n <output name> ] [optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
 
-#If using forksense run in -r directory as there was a bug (now fixed?) that origin and termination bed files are saved to pwd then move to -o.
+# If using forksense run in -a directory as there was a bug (now fixed?) that origin and termination bed files are saved to pwd then move to -o.
 # Can use absolute or relative paths.
 
 #optional:
-# -g to do basecalling and mapping, default is off, if off requires indexed bam file called alignments.sorted, and sequencing_summary.txt to be present in -r </path/to/save/run/files>. Make sure -r doesn't contain any files/folders that could be overwritten.
-# -m to do just mapping. Default it off. If using this option it requires reads.fastq file in -r directory. Or chose other file with -q.
-# -q Use with -m, fastq file if not called reads.fastq and in -r directory.
-# -r fastq files, sequencing summary and indexed bam of whole run saved here
+# -g to do basecalling and mapping, default is off, if off requires indexed bam file called alignments.sorted, and sequencing_summary.txt to be present in -a </path/to/save/run/files>. Make sure -a doesn't contain any files/folders that could be overwritten.
+# -m to do just mapping. Default it off. If using this option it requires reads.fastq file in -a directory. Or chose other file with -q.
+# -q Use with -m, path to fastq file if not called reads.fastq and in -a directory.
+# -a fastq files, sequencing summary and indexed bam of whole run saved here
 # -o create and populate folder with any filtered indexed bam files, DNAscent detect and forkSense files so that you can reanalyse reads with different parameters without overwriting eg whole run or just specific chromosomes
 # -k to use forkSense, default off
 # -d default is 1000, same as default for dnascent detect
@@ -38,7 +38,7 @@ while [ "$1" != "" ]; do
 	case $1 in
 		-f )	shift
 			FAST5="$1" ;;
-		-r )	shift
+		-a )	shift
 			RUNPATH="$1" ;;
 		-o )	shift
 			SAVEDIR="$1" ;;
@@ -46,6 +46,8 @@ while [ "$1" != "" ]; do
 		-m )	MAPPING="TRUE" ;;
 		-q )	shift
 			FASTQTEMP="$1" ;;
+		-r )	shift
+			REFGENOME="$1" ;;
 		-k )	FORKSENSE="TRUE" ;;
 		-d )	shift
 			DETECTTHRESHOLD="$1" ;;
@@ -80,6 +82,7 @@ echo FORKSENSE = $FORKSENSE
 echo FAST5 = $FAST5
 echo RUNPATH = $RUNPATH
 echo SAVEDIR = $SAVEDIR
+echo REFGENOME = $REFGENOME
 echo DETECTTHRESHOLD = $DETECTTHRESHOLD
 echo NAME = $NAME
 echo REGION = $REGION
@@ -114,7 +117,7 @@ fi
 
 if [ "$BASECALL" != "FALSE" ] || [ "$MAPPING" != "FALSE" ]; then
 	#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
-	/data/software_local/minimap2-2.10/minimap2 -ax map-ont -t 50 /data/workspace/rose/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt | samtools view -Sb - | samtools sort - -o "$RUNPATH"alignments.sorted
+	/data/software_local/minimap2-2.10/minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt | samtools view -Sb - | samtools sort - -o "$RUNPATH"alignments.sorted
 
 	samtools index "$RUNPATH"alignments.sorted
 
@@ -137,7 +140,7 @@ fi
 echo "DNAscent index"
 /home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/DNAscent index -f "$FAST5" -s "$RUNPATH"sequencing_summary.txt -o "$RUNPATH"index.dnascent 2> "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt
 echo "DNAscent detect"
-/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/DNAscent detect -b "$BAM" -r /data/workspace/rose/GCA_000001405.15_GRCh38_no_alt_analysis_set.fna -i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$NAME".detect -t 50 --GPU 0 -l "$DETECTTHRESHOLD" 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt
+/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/DNAscent detect -b "$BAM" -r "$REFGENOME" -i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$NAME".detect -t 50 --GPU 0 -l "$DETECTTHRESHOLD" 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt
 
 echo
 echo "$RUNPATH""$SAVEDIR" detect complete.
