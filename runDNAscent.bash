@@ -233,6 +233,28 @@ function script_init() {
     readonly guppy_model="dna_r9.4.1_450bps_fast.cfg"			# guppy model to use for basecalling
 }
 
+# DESC: Prints variables those variables that have been set, if verbose true
+# ARGS: None
+# OUTS: None
+# NOTE: 
+function print_variables() {
+	if [ "$verbose" = true ]; then
+		echo BASECALL and mapping = $BASECALL
+		echo MAPPING only = $MAPPING
+		echo FORKSENSE = $FORKSENSE
+		echo FAST5 = $FAST5
+		echo RUNPATH = $RUNPATH
+		echo SAVEDIR = $SAVEDIR
+		echo REFGENOME = $REFGENOME
+		echo DETECTTHRESHOLD = $DETECTTHRESHOLD
+		echo NAME = $NAME
+		echo REGION = $REGION
+		echo SUBSAMPLE = $SUBSAMPLE
+		echo "BAM to use for detect" = $BAM
+		echo "Fastq file to use" = $FASTQ
+	fi
+}
+
 # DESC: Script initialisation for use on Nieduszynski server at UoO
 # ARGS: None
 # OUTS: Exports locations for cuda libraries
@@ -279,21 +301,7 @@ fi
 
 
 #print variables to check
-
-echo BASECALL and mapping = $BASECALL
-echo MAPPING only = $MAPPING
-echo FORKSENSE = $FORKSENSE
-echo FAST5 = $FAST5
-echo RUNPATH = $RUNPATH
-echo SAVEDIR = $SAVEDIR
-echo REFGENOME = $REFGENOME
-echo DETECTTHRESHOLD = $DETECTTHRESHOLD
-echo NAME = $NAME
-echo REGION = $REGION
-echo SUBSAMPLE = $SUBSAMPLE
-echo "BAM to use for detect" = $BAM
-echo "Fastq file to use" = $FASTQ
-
+print_variables
 
 #optional basecalling (guppy) and mapping (minimap) if starting from fast5 files
 if [ "$BASECALL" = true ]; then
