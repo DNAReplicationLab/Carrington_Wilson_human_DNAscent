@@ -194,6 +194,10 @@ function script_init() {
 function UoO_init() {
 	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
 	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
+	export PATH=$PATH:/data/software_local/ont-guppy/bin		# path to guppy
+	export PATH=$PATH:/data/software_local/minimap2-2.10/		# path to minimap2
+	export PATH=$PATH:/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/				# path to DNAscent v2
+	readonly python_utils_dir="/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils"	# path to DNAscent v2 utilities
 }
 
 # DESC: Script initialisation for use on EI HPC at NRP
@@ -264,7 +268,7 @@ if [ "$BASECALL" = true ]; then
 	touch "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt
 
 	#use guppy to basecall fast5 files to generate fastq files, StdOut saved to guppy_ouput.txt
-	/data/software_local/ont-guppy/bin/guppy_basecaller -i "$FAST5" -s "$RUNPATH" -c /data/software_local/ont-guppy/data/dna_r9.4.1_450bps_fast.cfg -r -x 'cuda:0' > "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt
+	guppy_basecaller -i "$FAST5" -s "$RUNPATH" -c /data/software_local/ont-guppy/data/dna_r9.4.1_450bps_fast.cfg -r -x 'cuda:0' > "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt
 
 	#tidy output
 	mkdir "$RUNPATH"fastq_files
@@ -279,7 +283,7 @@ fi
 
 if [ "$BASECALL" = true ] || [ "$MAPPING" = true ]; then
 	#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
-	/data/software_local/minimap2-2.10/minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt | samtools view -Sb - | samtools sort - -o "$RUNPATH"alignments.sorted
+	minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt | samtools view -Sb - | samtools sort - -o "$RUNPATH"alignments.sorted
 
 	samtools index "$RUNPATH"alignments.sorted
 
@@ -300,9 +304,9 @@ fi
 
 #run DNAscent 2.0 index and detect. StdErr saved to detect_output.txt. If you chose to make a smaller region bam then DNAscent uses this bam.
 echo "DNAscent index"
-/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/DNAscent index -f "$FAST5" -s "$RUNPATH"sequencing_summary.txt -o "$RUNPATH"index.dnascent 2> "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt
+DNAscent index -f "$FAST5" -s "$RUNPATH"sequencing_summary.txt -o "$RUNPATH"index.dnascent 2> "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt
 echo "DNAscent detect"
-/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/DNAscent detect -b "$BAM" -r "$REFGENOME" -i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$NAME".detect -t 50 --GPU 0 -l "$DETECTTHRESHOLD" 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt
+DNAscent detect -b "$BAM" -r "$REFGENOME" -i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$NAME".detect -t 50 --GPU 0 -l "$DETECTTHRESHOLD" 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt
 
 echo
 echo "$RUNPATH""$SAVEDIR" detect complete.
@@ -312,16 +316,16 @@ echo
 if [ "$FORKSENSE" = true ]; then
 	touch "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
 	echo "DNAscent forkSense"
-	/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".forkSense --markOrigins --markTerminations 2> "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
+	DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".forkSense --markOrigins --markTerminations 2> "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
 	echo "$RUNPATH""$SAVEDIR" forksense complete.
 
 	#Convert detect and forkSense files to bedgraphs, StdErr saved to bedgraph_output.txt
 	echo "make bedgraphs"
-	python /home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense -o "$RUNPATH""$SAVEDIR"/bedgraphs/ 2> "$RUNPATH"/"$SAVEDIR"/logfiles/bedgraph_output.txt
+	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense -o "$RUNPATH""$SAVEDIR"/bedgraphs/ 2> "$RUNPATH"/"$SAVEDIR"/logfiles/bedgraph_output.txt
 	else
 	#Just convert detect file to bedgraphs
 	echo "make bedgraphs"
-	python /home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/bedgraphs/ 2> "$RUNPATH""$SAVEDIR"/logfiles/bedgraph_output.txt
+	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/bedgraphs/ 2> "$RUNPATH""$SAVEDIR"/logfiles/bedgraph_output.txt
 fi
 
 echo
