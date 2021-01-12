@@ -1,24 +1,44 @@
 #!/bin/bash
 
-# Purpose: to process fast5 (or bam) files from nanopore run through to the end of DNAscent.
-# Before you start create a folder where you would like to save whole run files (-a below), this will be </folder/to/save/run/files>
+#----------------------------------------------------------
+# Copyright 2020-2021 Rose Wilson (University of Oxford) and Conrad Nieduszynski (Earlham Institute)
+# Written by Rose Wilson (University of Oxford) and Conrad Nieduszynski (Earlham Institute)
+# This software is licensed under GPL-3.0.  You should have
+# received a copy of the license with this software.  If
+# not, please Email the author.
+#----------------------------------------------------------
 
-# Usage: bash runDNAscent.bash -f </path/to/fast5/files> -a </path/to/save/whole/run/files> -o <name for ouput directory> -r </path/to/reference/genome> [ optional: -g | -m ] [ optional: -q </path/to/fastq> -k -d <detect threshold> -n <output name> ] [optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
+# A bash script for processing nanopore DNA sequence data through the DNAscent pipeline
+# Bash script template inspiration from: https://betterdev.blog/minimal-safe-bash-script-template/
+# Further bash template inspiration from: https://github.com/ralish/bash-script-template/blob/main/template.sh
 
-# If using forksense run in -a directory as there was a bug (now fixed?) that origin and termination bed files are saved to pwd then move to -o.
-# Can use absolute or relative paths.
+function usage() {
+	cat << EOF
+Usage: bash runDNAscent.bash -f </path/to/fast5/files> -a </path/to/save/whole/run/files> -o <name for ouput directory> -r </path/to/reference/genome> [ optional: -g | -m ] [ optional: -q </path/to/fastq> -k -d <detect threshold> -n <output name> ] [optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
 
-#optional:
-# -g to do basecalling and mapping, default is off, if off requires indexed bam file called alignments.sorted, and sequencing_summary.txt to be present in -a </path/to/save/run/files>. Make sure -a doesn't contain any files/folders that could be overwritten.
-# -m to do just mapping. Default it off. If using this option it requires reads.fastq file in -a directory. Or chose other file with -q.
-# -q Use with -m, path to fastq file if not called reads.fastq and in -a directory.
-# -a fastq files, sequencing summary and indexed bam of whole run saved here
-# -o create and populate folder with any filtered indexed bam files, DNAscent detect and forkSense files so that you can reanalyse reads with different parameters without overwriting eg whole run or just specific chromosomes
-# -k to use forkSense, default off
-# -d default is 1000, same as default for dnascent detect
-# -n default is output, suggested to use other name especially if using -L or -s
-# -L to generate bam for defined genomic regions and use this bam for dnascent (-L flag in samtools view)
-# -s to generate subsampled bam and use this bam for dnascent (-s flag in samtools view)
+Purpose: to process fast5 (or bam) files from nanopore run through to the end of DNAscent.
+
+Before you start create a folder where you would like to save whole run files (-a below), this will be </folder/to/save/run/files>
+
+If using forksense run in -a directory as there was a bug (now fixed?) that origin and termination bed files are saved to pwd then move to -o.
+
+Can use absolute or relative paths.
+
+Available options:
+
+-g           to do basecalling and mapping, default is off, if off requires indexed bam file called alignments.sorted, and sequencing_summary.txt to be present in -a </path/to/save/run/files>. Make sure -a doesn't contain any files/folders that could be overwritten.
+-m           to do just mapping. Default it off. If using this option it requires reads.fastq file in -a directory. Or chose other file with -q.
+-q           Use with -m, path to fastq file if not called reads.fastq and in -a directory.
+-a           fastq files, sequencing summary and indexed bam of whole run saved here
+-o           create and populate folder with any filtered indexed bam files, DNAscent detect and forkSense files so that you can reanalyse reads with different parameters without overwriting eg whole run or just specific chromosomes
+-k           to use forkSense, default off
+-d           default is 1000, same as default for dnascent detect
+-n           default is output, suggested to use other name especially if using -L or -s
+-L           to generate bam for defined genomic regions and use this bam for dnascent (-L flag in samtools view)
+-s           to generate subsampled bam and use this bam for dnascent (-s flag in samtools view)
+EOF
+}
+
 
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
