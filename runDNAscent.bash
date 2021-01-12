@@ -160,7 +160,7 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
 
 
-if [ "$REGION" != "FALSE" ] || [ "$SUBSAMPLE" != "FALSE" ]; then
+if [ "$REGION" = true ] || [ "$SUBSAMPLE" = true ]; then
 	BAM="$RUNPATH""$SAVEDIR"/"$NAME".bam
 	else
 	BAM="$RUNPATH"alignments.sorted
@@ -195,7 +195,7 @@ mkdir "$RUNPATH""$SAVEDIR"/logfiles
 touch "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt "$RUNPATH""$SAVEDIR"/logfiles/bedgraph_output.txt
 
 #optional basecalling (guppy) and mapping (minimap) if starting from fast5 files
-if [ "$BASECALL" != "FALSE" ]; then
+if [ "$BASECALL" = true ]; then
 	mkdir "$RUNPATH""$SAVEDIR"/logfiles/guppy_logfiles
 	touch "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt
 
@@ -213,7 +213,7 @@ if [ "$BASECALL" != "FALSE" ]; then
 	echo
 fi
 
-if [ "$BASECALL" != "FALSE" ] || [ "$MAPPING" != "FALSE" ]; then
+if [ "$BASECALL" = true ] || [ "$MAPPING" = true ]; then
 	#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
 	/data/software_local/minimap2-2.10/minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt | samtools view -Sb - | samtools sort - -o "$RUNPATH"alignments.sorted
 
@@ -226,7 +226,7 @@ fi
 
 #if you want to make a smaller bam to perform DNAscent on either specific regions or a subsample of full bam, provide arguments -L (bed file with list of regions to keep) or -s (INT.FRAC for samtools view -s subsample flag), don't use together, also provide -n <name>
 
-if [ "$REGION" != "FALSE" ]; then
+if [ "$REGION" = true ]; then
 	samtools view -h -b -M -L "$REGION" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
 	samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
 	elif [ "$SUBSAMPLE" != "FALSE" ]; then
@@ -245,7 +245,7 @@ echo "$RUNPATH""$SAVEDIR" detect complete.
 echo
 
 #optional (-f) run DNAscent 2.0 forksense , StdErr saved to forkSense_output.txt
-if [ "$FORKSENSE" != "FALSE" ]; then
+if [ "$FORKSENSE" = true ]; then
 	touch "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
 	echo "DNAscent forkSense"
 	/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".forkSense --markOrigins --markTerminations 2> "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
