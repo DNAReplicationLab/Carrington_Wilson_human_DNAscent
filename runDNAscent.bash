@@ -11,6 +11,9 @@
 # A bash script for processing nanopore DNA sequence data through the DNAscent pipeline
 # Bash script template inspiration from: https://betterdev.blog/minimal-safe-bash-script-template/
 # Further bash template inspiration from: https://github.com/ralish/bash-script-template/blob/main/template.sh
+# And some more advise from Google: https://google.github.io/styleguide/shellguide.html#s7-naming-conventions
+
+# Checked with https://www.shellcheck.net
 
 # DESC: Usage help
 # ARGS: None
@@ -284,7 +287,9 @@ fi
 
 if [ "$BASECALL" = true ] || [ "$MAPPING" = true ]; then
 	#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
-	minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt | samtools view -Sb - | samtools sort - -o "$RUNPATH"alignments.sorted
+	minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt \
+		| samtools view -Sb - \
+		| samtools sort - -o "$RUNPATH"alignments.sorted
 
 	samtools index "$RUNPATH"alignments.sorted
 
