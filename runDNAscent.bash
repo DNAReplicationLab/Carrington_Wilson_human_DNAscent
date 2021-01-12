@@ -209,6 +209,7 @@ function EI_HPC_init() {
 	source package /tgac/software/testing/bin/minimap2-2.17		# minimap2 - 2.17
 	source package 758be80b-33cc-495a-9adc-11882ab145b1			# samtools - 1.10
 	source /ei/software/staging/CISSUPPORT-12154/stagingloader	# DNAscent 2.0
+	readonly python_utils_dir="/ei/projects/a/ac9cb897-b4c0-44d0-a54b-2ddf13310bc4/data/scripts"	# path to DNAscent v2 utilities
 }
 
 ########################################################################
