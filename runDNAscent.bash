@@ -125,7 +125,7 @@ function parse_params() {
 				shift
 				;;
 			-r )
-				REFGENOME"${2-}"
+				REFGENOME="${2-}"
 				shift
 				;;
 			-k )
@@ -161,7 +161,9 @@ function parse_params() {
 
 	# check required params and arguments
 	[[ -z "${FAST5-}" ]] && die "Missing required parameter: fast5"
-	[[ ${#args[@]} -eq 0 ]] && die "Missing script arguments"
+
+	# commented out - there aren't any required arguments
+	#[[ ${#args[@]} -eq 0 ]] && die "Missing script arguments"
 	
 	return 0
 }
@@ -251,7 +253,7 @@ function print_variables() {
 		echo REGION = $REGION
 		echo SUBSAMPLE = $SUBSAMPLE
 		echo "BAM to use for detect" = $BAM
-		echo "Fastq file to use" = $FASTQ
+ 		echo "Fastq file to use" = $FASTQ
 	fi
 }
 
@@ -277,7 +279,7 @@ function EI_HPC_init() {
 	source package 0e96b5e6-3f41-4d6f-91cc-1b6d7ad05ef5			# guppy - 4.0.14
 	source package /tgac/software/testing/bin/minimap2-2.17		# minimap2 - 2.17
 	source package 758be80b-33cc-495a-9adc-11882ab145b1			# samtools - 1.10
-	source /ei/software/staging/CISSUPPORT-12154/stagingloader	# DNAscent 2.0
+	source /ei/software/staging/CISSUPPORT-12154/stagingloader	# DNAscent - 2.0.2
 	readonly python_utils_dir="/ei/projects/a/ac9cb897-b4c0-44d0-a54b-2ddf13310bc4/data/scripts"	# path to DNAscent v2 utilities
 	readonly guppy_model_dir=""									# path to guppy model files
 }
@@ -298,7 +300,6 @@ if [ "$earlham_HPC" = true ]; then
 	else
 	UoO_init
 fi
-
 
 #print variables to check
 print_variables
