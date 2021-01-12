@@ -17,72 +17,147 @@
 # OUTS: None
 function usage() {
 	cat << EOF
-Usage: bash runDNAscent.bash -f </path/to/fast5/files> -a </path/to/save/whole/run/files> -o <name for ouput directory> -r </path/to/reference/genome> [ optional: -g | -m ] [ optional: -q </path/to/fastq> -k -d <detect threshold> -n <output name> ] [optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
+Usage: bash runDNAscent.bash -f </path/to/fast5/files> -a </path/to/save/whole/run/files>
+-o <name for ouput directory> -r </path/to/reference/genome> [ optional: -g | -m ]
+[ optional: -q </path/to/fastq> -k -d <detect threshold> -n <output name> ]
+[optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
 
 Purpose: to process fast5 (or bam) files from nanopore run through to the end of DNAscent.
 
-Before you start create a folder where you would like to save whole run files (-a below), this will be </folder/to/save/run/files>
+Before you start create a folder where you would like to save whole run files (-a below),
+this will be </folder/to/save/run/files>
 
-If using forksense run in -a directory as there was a bug (now fixed?) that origin and termination bed files are saved to pwd then move to -o.
+If using forksense run in -a directory as there was a bug (now fixed?) that origin and
+termination bed files are saved to pwd then move to -o.
 
 Can use absolute or relative paths.
 
 Available options:
 
--g           to do basecalling and mapping, default is off, if off requires indexed bam file called alignments.sorted, and sequencing_summary.txt to be present in -a </path/to/save/run/files>. Make sure -a doesn't contain any files/folders that could be overwritten.
--m           to do just mapping. Default it off. If using this option it requires reads.fastq file in -a directory. Or chose other file with -q.
--q           Use with -m, path to fastq file if not called reads.fastq and in -a directory.
--a           fastq files, sequencing summary and indexed bam of whole run saved here
--o           create and populate folder with any filtered indexed bam files, DNAscent detect and forkSense files so that you can reanalyse reads with different parameters without overwriting eg whole run or just specific chromosomes
--k           to use forkSense, default off
--d           default is 1000, same as default for dnascent detect
--n           default is output, suggested to use other name especially if using -L or -s
--L           to generate bam for defined genomic regions and use this bam for dnascent (-L flag in samtools view)
--s           to generate subsampled bam and use this bam for dnascent (-s flag in samtools view)
+-g			to do basecalling and mapping, default is off, if off requires indexed bam
+			file called alignments.sorted, and sequencing_summary.txt to be present in
+			-a </path/to/save/run/files>. Make sure -a doesn't contain any files/folders
+			that could be overwritten.
+-m			to do just mapping. Default it off. If using this option it requires
+			reads.fastq file in -a directory. Or chose other file with -q.
+-q			Use with -m, path to fastq file if not called reads.fastq and in -a directory.
+-a			fastq files, sequencing summary and indexed bam of whole run saved here
+-o			create and populate folder with any filtered indexed bam files, DNAscent
+			detect and forkSense files so that you can reanalyse reads with different
+			parameters without overwriting eg whole run or just specific chromosomes
+-k			to use forkSense, default off
+-d			default is 1000 nts, same as default for dnascent detect
+-n			default is output, suggested to use other name especially if using -L or -s
+-L			to generate bam for defined genomic regions and use this bam for dnascent
+			(-L flag in samtools view)
+-s			to generate subsampled bam and use this bam for dnascent (-s flag in samtools view)
 EOF
 }
 
+# DESC: Exit script with the given message
+# ARGS: $1 (required): Message to print on exit
+#       $2 (optional): Exit code (defaults to 1)
+# OUTS: None
+function die() {
+  local msg=$1
+  local code=${2-1}				# default exit status 1
+  echo "$msg"
+  exit "$code"
+}
+
+# DESC: Parameter parser
+# ARGS: $@ (optional): Arguments provided to the script
+# OUTS: Variables indicating command-line parameters and options
+function parse_params() {
+	# default values of variables set from params
+	FAST5=''
+	BASECALL="FALSE"
+	MAPPING="FALSE"
+	FASTQTEMP="DEFAULT"
+	FORKSENSE="FALSE"
+	DETECTTHRESHOLD=1000
+	NAME="output"
+	REGION="FALSE"
+	SUBSAMPLE="FALSE"
+
+	#collect command line arguments
+	while :; do
+		case "${1-}" in
+			-h | --help)
+				usage
+				exit 0
+				;;
+            -v | --verbose)
+                verbose=true
+                ;;
+			-f )	
+				FAST5="${2-}"
+				shift
+				;;
+			-a )
+				RUNPATH="${2-}"
+				shift
+				;;
+			-o )
+				SAVEDIR="${2-}"
+				shift
+				;;
+			-g )
+				BASECALL=true
+				;;
+			-m )
+				MAPPING=true
+				;;
+			-q )
+				FASTQTEMP="${2-}"
+				shift
+				;;
+			-r )
+				REFGENOME"${2-}"
+				shift
+				;;
+			-k )
+				FORKSENSE=true
+				;;
+			-d )
+				DETECTTHRESHOLD="${2-}"
+				shift
+				;;
+			-n )
+				NAME="${2-}"
+				shift
+				;;
+			-L )
+				REGION="$1""${2-}"
+				shift
+				;;
+			-s )
+				SUBSAMPLE="${2-}"
+				shift
+				;;
+			-?*)
+				die "Unknown option: $1"
+				;;
+			*)
+				break
+				;;
+		esac
+		shift
+	done
+	
+	args=("$@")
+
+	# check required params and arguments
+	[[ -z "${FAST5-}" ]] && die "Missing required parameter: fast5"
+	[[ ${#args[@]} -eq 0 ]] && die "Missing script arguments"
+	
+	return 0
+}
+
+parse_params "$@"
 
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
-
-#set defualt options
-BASECALL="FALSE"
-MAPPING="FALSE"
-FASTQTEMP="DEFAULT"
-FORKSENSE="FALSE"
-DETECTTHRESHOLD=1000
-NAME="output"
-REGION="FALSE"
-SUBSAMPLE="FALSE"
-
-#collect command line arguments
-while [ "$1" != "" ]; do
-	case $1 in
-		-f )	shift
-			FAST5="$1" ;;
-		-a )	shift
-			RUNPATH="$1" ;;
-		-o )	shift
-			SAVEDIR="$1" ;;
-		-g )	BASECALL="TRUE" ;;
-		-m )	MAPPING="TRUE" ;;
-		-q )	shift
-			FASTQTEMP="$1" ;;
-		-r )	shift
-			REFGENOME="$1" ;;
-		-k )	FORKSENSE="TRUE" ;;
-		-d )	shift
-			DETECTTHRESHOLD="$1" ;;
-		-n )	shift
-			NAME="$1" ;;
-		-L )	shift
-			REGION="$1" ;;
-		-s )	shift
-			SUBSAMPLE="$1" ;;
-	esac
-	shift
-done
 
 
 if [ "$REGION" != "FALSE" ] || [ "$SUBSAMPLE" != "FALSE" ]; then
