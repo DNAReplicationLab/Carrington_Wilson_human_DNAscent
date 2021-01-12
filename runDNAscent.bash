@@ -201,7 +201,10 @@ function UoO_init() {
 # OUTS: Nothing yet
 # NOTE: This is where to add anything specific to running on the EI HPC.
 function EI_HPC_init() {
-	# add module load for required software here?
+	source package 0e96b5e6-3f41-4d6f-91cc-1b6d7ad05ef5			# guppy - 4.0.14
+	source package /tgac/software/testing/bin/minimap2-2.17		# minimap2 - 2.17
+	source package 758be80b-33cc-495a-9adc-11882ab145b1			# samtools - 1.10
+	source /ei/software/staging/CISSUPPORT-12154/stagingloader	# DNAscent 2.0
 }
 
 ########################################################################
