@@ -32,25 +32,31 @@ termination bed files are saved to pwd then move to -o.
 
 Can use absolute or relative paths.
 
-Available options:
+Required parameters/flags:
 
--g			to do basecalling and mapping, default is off, if off requires indexed bam
-			file called alignments.sorted, and sequencing_summary.txt to be present in
-			-a </path/to/save/run/files>. Make sure -a doesn't contain any files/folders
-			that could be overwritten.
--m			to do just mapping. Default it off. If using this option it requires
-			reads.fastq file in -a directory. Or chose other file with -q.
--q			Use with -m, path to fastq file if not called reads.fastq and in -a directory.
--a			fastq files, sequencing summary and indexed bam of whole run saved here
--o			create and populate folder with any filtered indexed bam files, DNAscent
-			detect and forkSense files so that you can reanalyse reads with different
-			parameters without overwriting eg whole run or just specific chromosomes
--k			to use forkSense, default off
--d			default is 1000 nts, same as default for dnascent detect
--n			default is output, suggested to use other name especially if using -L or -s
--L			to generate bam for defined genomic regions and use this bam for dnascent
-			(-L flag in samtools view)
--s			to generate subsampled bam and use this bam for dnascent (-s flag in samtools view)
+
+Optional parameters/flags:
+
+	-E|--EI			run on EI HPC. Default is to run locally (on Nieduszynski server in Oxford)
+	-h|--help		Displays this help
+	-v|--verbose	Displays verbose output
+	-g				to do basecalling and mapping, default is off, if off requires indexed bam
+					file called alignments.sorted, and sequencing_summary.txt to be present in
+					-a </path/to/save/run/files>. Make sure -a doesn't contain any files/folders
+					that could be overwritten.
+	-m				to do just mapping. Default it off. If using this option it requires
+					reads.fastq file in -a directory. Or chose other file with -q.
+	-q				Use with -m, path to fastq file if not called reads.fastq and in -a directory.
+	-a				fastq files, sequencing summary and indexed bam of whole run saved here
+	-o				create and populate folder with any filtered indexed bam files, DNAscent
+					detect and forkSense files so that you can reanalyse reads with different
+					parameters without overwriting eg whole run or just specific chromosomes
+	-k				to use forkSense, default off
+	-d				default is 1000 nts, same as default for dnascent detect
+	-n				default is output, suggested to use other name especially if using -L or -s
+	-L				to generate bam for defined genomic regions and use this bam for dnascent
+					(-L flag in samtools view)
+	-s				to generate subsampled bam and use this bam for dnascent (-s flag in samtools view)
 EOF
 }
 
@@ -90,6 +96,9 @@ function parse_params() {
             -v | --verbose)
                 verbose=true
                 ;;
+            -E | --EI)
+            	earlham_HPC=true
+            	;;
 			-f )	
 				FAST5="${2-}"
 				shift
@@ -154,11 +163,63 @@ function parse_params() {
 	return 0
 }
 
+# DESC: Generic script initialisation
+# ARGS: $@ (optional): Arguments provided to the script
+# OUTS: $orig_cwd: The current working directory when the script was run
+#       $script_path: The full path to the script
+#       $script_dir: The directory path of the script
+#       $script_name: The file name of the script
+#       $script_params: The original parameters provided to the script
+#       $ta_none: The ANSI control code to reset all text attributes
+# NOTE: $script_path only contains the path that was used to call the script
+#       and will not resolve any symlinks which may be present in the path.
+#       You can use a tool like realpath to obtain the "true" path. The same
+#       caveat applies to both the $script_dir and $script_name variables.
+function script_init() {
+    # Useful paths
+    readonly orig_cwd="$PWD"
+    readonly script_path="${BASH_SOURCE[0]}"
+    readonly script_dir="$(dirname "$script_path")"
+    readonly script_name="$(basename "$script_path")"
+    readonly script_params="$*"
+
+    # Important to always set as we use it in the exit handler
+    readonly ta_none="$(tput sgr0 2> /dev/null || true)"
+}
+
+# DESC: Script initialisation for use on Nieduszynski server at UoO
+# ARGS: None
+# OUTS: Exports locations for cuda libraries
+# NOTE: This is where to add anything specific to running on Nieduszynski server.
+function UoO_init() {
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
+}
+
+# DESC: Script initialisation for use on EI HPC at NRP
+# ARGS: None
+# OUTS: Nothing yet
+# NOTE: This is where to add anything specific to running on the EI HPC.
+function EI_HPC_init() {
+	# add module load for required software here?
+}
+
+########################################################################
+# Main programme starts here
+########################################################################
+
+# First collect parameters and flags
 parse_params "$@"
 
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
+# Generic script initialisation that is compute independent
+script_init "$@"
 
+# Compute specific script initialisation (either UoO Nieduszynski (local) or EI HPC)
+if [ "$earlham_HPC" = true ]; then
+	EI_HPC_init
+	else
+	UoO_init
+fi
 
 if [ "$REGION" = true ] || [ "$SUBSAMPLE" = true ]; then
 	BAM="$RUNPATH""$SAVEDIR"/"$NAME".bam
