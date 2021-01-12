@@ -12,6 +12,9 @@
 # Bash script template inspiration from: https://betterdev.blog/minimal-safe-bash-script-template/
 # Further bash template inspiration from: https://github.com/ralish/bash-script-template/blob/main/template.sh
 
+# DESC: Usage help
+# ARGS: None
+# OUTS: None
 function usage() {
 	cat << EOF
 Usage: bash runDNAscent.bash -f </path/to/fast5/files> -a </path/to/save/whole/run/files> -o <name for ouput directory> -r </path/to/reference/genome> [ optional: -g | -m ] [ optional: -q </path/to/fastq> -k -d <detect threshold> -n <output name> ] [optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
