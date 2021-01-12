@@ -210,6 +210,25 @@ function script_init() {
 
     # Important to always set as we use it in the exit handler
     readonly ta_none="$(tput sgr0 2> /dev/null || true)"
+
+	# Set the bam file to be used with DNAscent dependent upon whether subregion requested
+	if [ "$REGION" = true ] || [ "$SUBSAMPLE" = true ]; then
+		BAM="$RUNPATH""$SAVEDIR"/"$NAME".bam
+		else
+		BAM="$RUNPATH"alignments.sorted
+	fi
+
+	# Set the location of fastq files as specified by user
+	if [ "$FASTQTEMP" == "DEFAULT" ]; then
+		FASTQ="$RUNPATH"reads.fastq
+		else
+		FASTQ="$FASTQTEMP"
+	fi
+ 
+	#make folders and files
+ 	mkdir "$RUNPATH""$SAVEDIR"
+	mkdir "$RUNPATH""$SAVEDIR"/logfiles
+	touch "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt "$RUNPATH""$SAVEDIR"/logfiles/bedgraph_output.txt
     
     readonly guppy_model="dna_r9.4.1_450bps_fast.cfg"			# guppy model to use for basecalling
 }
@@ -258,17 +277,6 @@ if [ "$earlham_HPC" = true ]; then
 	UoO_init
 fi
 
-if [ "$REGION" = true ] || [ "$SUBSAMPLE" = true ]; then
-	BAM="$RUNPATH""$SAVEDIR"/"$NAME".bam
-	else
-	BAM="$RUNPATH"alignments.sorted
-fi
-
-if [ "$FASTQTEMP" == "DEFAULT" ]; then
-	FASTQ="$RUNPATH"reads.fastq
-	else
-	FASTQ="$FASTQTEMP"
-fi
 
 #print variables to check
 
@@ -286,11 +294,6 @@ echo SUBSAMPLE = $SUBSAMPLE
 echo "BAM to use for detect" = $BAM
 echo "Fastq file to use" = $FASTQ
 
-#make folders and files
-
-mkdir "$RUNPATH""$SAVEDIR"
-mkdir "$RUNPATH""$SAVEDIR"/logfiles
-touch "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt "$RUNPATH""$SAVEDIR"/logfiles/bedgraph_output.txt
 
 #optional basecalling (guppy) and mapping (minimap) if starting from fast5 files
 if [ "$BASECALL" = true ]; then
