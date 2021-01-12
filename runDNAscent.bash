@@ -166,6 +166,28 @@ function parse_params() {
 	return 0
 }
 
+# DESC: basecall fast5 data with guppy to generate fastq
+# ARGS: None
+# OUTS: None
+# NOTE: This still needs to be generalised and adapted for SLURM use
+function basecall_fn() {
+	mkdir "$RUNPATH""$SAVEDIR"/logfiles/guppy_logfiles
+	touch "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt
+
+	#use guppy to basecall fast5 files to generate fastq files, StdOut saved to guppy_ouput.txt
+	guppy_basecaller -i "$FAST5" -s "$RUNPATH" -c "$guppy_model_dir""$guppy_model" -r -x 'cuda:0' > "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt
+
+	#tidy output
+	mkdir "$RUNPATH"fastq_files
+	mv "$RUNPATH"*.log "$RUNPATH""$SAVEDIR"/logfiles/guppy_logfiles
+	mv "$RUNPATH"*.fastq "$RUNPATH"fastq_files
+	cat "$RUNPATH"fastq_files/*.fastq > "$RUNPATH"reads.fastq
+
+	echo
+	echo "$RUNPATH" fastq files generated and tidied.
+	echo
+}
+
 # DESC: Generic script initialisation
 # ARGS: $@ (optional): Arguments provided to the script
 # OUTS: $orig_cwd: The current working directory when the script was run
@@ -188,6 +210,8 @@ function script_init() {
 
     # Important to always set as we use it in the exit handler
     readonly ta_none="$(tput sgr0 2> /dev/null || true)"
+    
+    readonly guppy_model="dna_r9.4.1_450bps_fast.cfg"			# guppy model to use for basecalling
 }
 
 # DESC: Script initialisation for use on Nieduszynski server at UoO
@@ -201,6 +225,7 @@ function UoO_init() {
 	export PATH=$PATH:/data/software_local/minimap2-2.10/		# path to minimap2
 	export PATH=$PATH:/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/				# path to DNAscent v2
 	readonly python_utils_dir="/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils"	# path to DNAscent v2 utilities
+	readonly guppy_model_dir="/data/software_local/ont-guppy/data/"										# path to guppy model files
 }
 
 # DESC: Script initialisation for use on EI HPC at NRP
@@ -213,6 +238,7 @@ function EI_HPC_init() {
 	source package 758be80b-33cc-495a-9adc-11882ab145b1			# samtools - 1.10
 	source /ei/software/staging/CISSUPPORT-12154/stagingloader	# DNAscent 2.0
 	readonly python_utils_dir="/ei/projects/a/ac9cb897-b4c0-44d0-a54b-2ddf13310bc4/data/scripts"	# path to DNAscent v2 utilities
+	readonly guppy_model_dir=""									# path to guppy model files
 }
 
 ########################################################################
@@ -268,21 +294,7 @@ touch "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt "$RUNPATH""$SAVEDIR"/logfil
 
 #optional basecalling (guppy) and mapping (minimap) if starting from fast5 files
 if [ "$BASECALL" = true ]; then
-	mkdir "$RUNPATH""$SAVEDIR"/logfiles/guppy_logfiles
-	touch "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt
-
-	#use guppy to basecall fast5 files to generate fastq files, StdOut saved to guppy_ouput.txt
-	guppy_basecaller -i "$FAST5" -s "$RUNPATH" -c /data/software_local/ont-guppy/data/dna_r9.4.1_450bps_fast.cfg -r -x 'cuda:0' > "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt
-
-	#tidy output
-	mkdir "$RUNPATH"fastq_files
-	mv "$RUNPATH"*.log "$RUNPATH""$SAVEDIR"/logfiles/guppy_logfiles
-	mv "$RUNPATH"*.fastq "$RUNPATH"fastq_files
-	cat "$RUNPATH"fastq_files/*.fastq > "$RUNPATH"reads.fastq
-
-	echo
-	echo "$RUNPATH" fastq files generated and tidied.
-	echo
+	basecall_fn
 fi
 
 if [ "$BASECALL" = true ] || [ "$MAPPING" = true ]; then
