@@ -159,8 +159,11 @@ function parse_params() {
 	
 	args=("$@")
 
-	# check required params and arguments
+	# check required params
 	[[ -z "${FAST5-}" ]] && die "Missing required parameter: fast5"
+	# TODO: add equivalent lines for other required params
+
+	# TODO: add check that incompatible params aren't selected (e.g. -L and -s , if this really shouldn't ever be done)
 
 	# commented out - there aren't any required arguments
 	#[[ ${#args[@]} -eq 0 ]] && die "Missing script arguments"
@@ -265,8 +268,8 @@ function UoO_init() {
 	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
 	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
 	export PATH=$PATH:/data/software_local/ont-guppy/bin		# path to guppy
-	export PATH=$PATH:/data/software_local/minimap2-2.10/		# path to minimap2
-	export PATH=$PATH:/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/				# path to DNAscent v2
+	export PATH=$PATH:/data/software_local/minimap2-2.10		# path to minimap2
+	export PATH=$PATH:/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin				# path to DNAscent v2
 	readonly python_utils_dir="/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils"	# path to DNAscent v2 utilities
 	readonly guppy_model_dir="/data/software_local/ont-guppy/data/"										# path to guppy model files
 }
@@ -281,7 +284,7 @@ function EI_HPC_init() {
 	source package 758be80b-33cc-495a-9adc-11882ab145b1			# samtools - 1.10
 	source /ei/software/staging/CISSUPPORT-12154/stagingloader	# DNAscent - 2.0.2
 	readonly python_utils_dir="/ei/projects/a/ac9cb897-b4c0-44d0-a54b-2ddf13310bc4/data/scripts"	# path to DNAscent v2 utilities
-	readonly guppy_model_dir=""									# path to guppy model files
+	readonly guppy_model_dir=""									# path to guppy model files - empty, since not required
 }
 
 ########################################################################
