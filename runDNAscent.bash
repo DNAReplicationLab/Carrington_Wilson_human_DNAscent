@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #----------------------------------------------------------
-# Copyright 2020-2021 Rose Wilson (University of Oxford) and Conrad Nieduszynski (Earlham Institute)
+# Copyright 2020-2021 Rosemary H C Wilson (University of Oxford) and Conrad Nieduszynski (Earlham Institute)
 # Written by Rose Wilson (University of Oxford) and Conrad Nieduszynski (Earlham Institute)
 # This software is licensed under GPL-3.0.  You should have
 # received a copy of the license with this software.  If
