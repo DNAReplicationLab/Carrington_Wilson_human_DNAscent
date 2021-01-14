@@ -217,7 +217,7 @@ function script_init() {
     readonly ta_none="$(tput sgr0 2> /dev/null || true)"
 
 	# Set the bam file to be used with DNAscent dependent upon whether subregion requested
-	if [ "$REGION" = true ] || [ "$SUBSAMPLE" = true ]; then
+	if [ "$REGION" == true ] || [ "$SUBSAMPLE" == true ]; then
 		BAM="$RUNPATH""$SAVEDIR"/"$NAME".bam
 		else
 		BAM="$RUNPATH"alignments.sorted
