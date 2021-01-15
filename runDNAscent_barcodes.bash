@@ -23,6 +23,10 @@
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
 
+# path to guppy legacy as current guppy not working with GPU currently
+export PATH=/data/software_local/guppy_legacy/v3.6/bin:$PATH
+guppy_model_dir="/data/software_local/guppy_legacy/v3.6/data/"
+
 #set defualt options
 BASECALL="FALSE"
 BARCODE="FALSE"
@@ -88,7 +92,7 @@ if [ "$BASECALL" != "FALSE" ]; then
 
 #use guppy to basecall fast5 files to generate fastq files, StdOut saved to guppy_ouput.txt
 # barcode
-	/data/software_local/ont-guppy/bin/guppy_basecaller -i "$FAST5" -s "$RUNPATH" -c /data/software_local/ont-guppy/data/dna_r9.4.1_450bps_fast.cfg --barcode_kits "$BARCODE" -r -x 'cuda:0' > "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt
+	guppy_basecaller -i "$FAST5" -s "$RUNPATH" -c "$guppy_model_dir"dna_r9.4.1_450bps_fast.cfg --barcode_kits "$BARCODE" -r -x 'cuda:0' > "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt
 	#make list of barcodes to run over
 	PWD_TEMP=$PWD
 	cd "$RUNPATH"
