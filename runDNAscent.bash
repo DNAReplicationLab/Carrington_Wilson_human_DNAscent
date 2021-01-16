@@ -20,9 +20,9 @@
 # OUTS: None
 function usage() {
 	cat << EOF
-Usage: bash runDNAscent.bash -a </path/to/save/whole/run/files> -o <name_for_ouput directory> 
--r </path/to/reference/genome> [ optional: -g | -m ] [ optional: -f </path/to/fast5/files> 
--q </path/to/fastq> -k -d <detect threshold> -n <output name> -v -E -h]
+Usage: bash runDNAscent.bash -a </path/to/save/whole/run/files> -o <name_for_ouput directory> -f </path/to/fast5/files>
+-r </path/to/reference/genome> 
+[ optional: -g | -m ] [ optional: -q </path/to/fastq> -k -d <detect threshold> -n <output name> -v -E -h] 
 [optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
 
 Purpose: to process fast5, fastq or bam files from nanopore for BrdU incorporation using DNAscent 2.0.
@@ -41,7 +41,8 @@ Required parameters/flags:
 	-o 				create and populate folder with any filtered indexed bam files, DNAscent
 					detect and forkSense files so that you can reanalyse reads with different
 					parameters without overwriting eg whole run or just specific chromosomes
-				
+	-f				fast5 files
+
 Optional parameters/flags:
 
 	-E|--EI				run on EI HPC. Default is to run locally (on Nieduszynski server in Oxford)
@@ -103,7 +104,7 @@ function parse_params() {
          		-E | --EI)
          		   	RUNSCRIPT="EI"
          		   	;;
-			-f )	
+			-f )
 				FAST5="${2-}"
 				shift
 				;;
@@ -157,7 +158,7 @@ function parse_params() {
 		esac
 		shift
 	done
-	
+
 	args=("$@")
 
 	# check required params
@@ -168,7 +169,7 @@ function parse_params() {
 
 	# commented out - there aren't any required arguments
 	#[[ ${#args[@]} -eq 0 ]] && die "Missing script arguments"
-	
+
 	return 0
 }
 
@@ -230,20 +231,20 @@ function script_init() {
 		else
 		FASTQ="$FASTQTEMP"
 	fi
- 
+
 	#make folders and files
  	mkdir "$RUNPATH""$SAVEDIR"
 	mkdir "$RUNPATH""$SAVEDIR"/logfiles
-	touch "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt 
+	touch "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt
 	touch "$RUNPATH""$SAVEDIR"/logfiles/bedgraph_output.txt
-    
+
     readonly guppy_model="dna_r9.4.1_450bps_fast.cfg"			# guppy model to use for basecalling
 }
 
 # DESC: Prints variables those variables that have been set, if verbose true
 # ARGS: None
 # OUTS: None
-# NOTE: 
+# NOTE:
 function print_variables() {
 	if [ "$verbose" == true ]; then
 		echo Run script at $RUNSCRIPT
@@ -270,7 +271,7 @@ function print_variables() {
 function UoO_init() {
 	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
 	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
-	export PATH=/data/software_local/guppy_legacy/v3.6/bin:PATH		# path to guppy
+	export PATH=/data/software_local/guppy_legacy/v3.6/bin:$PATH		# path to guppy
 	export PATH=/data/software_local/minimap2-2.10:$PATH		# path to minimap2
 	export PATH=/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin:$PATH				# path to DNAscent v2
 	readonly python_utils_dir="/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils"	# path to DNAscent v2 utilities
@@ -328,7 +329,7 @@ if [ "$BASECALL" == true ] || [ "$MAPPING" == true ]; then
 	echo
 fi
 
-# if you want to make a smaller bam to perform DNAscent on either specific regions or a subsample of full bam, 
+# if you want to make a smaller bam to perform DNAscent on either specific regions or a subsample of full bam,
 # provide arguments -L (bed file with list of regions to keep) or -s (INT.FRAC for samtools view -s subsample flag), don't use together, also provide -n <name>
 
 if [ "$REGION" != "FALSE" ]; then
@@ -355,6 +356,9 @@ if [ "$FORKSENSE" == true ]; then
 	echo "DNAscent forkSense"
 	DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".forkSense --markOrigins --markTerminations 2> "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
 	echo "$RUNPATH""$SAVEDIR" forksense complete.
+	# to fix forksense save location bug
+	mv "$RUNPATH"origins_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
+	mv "$RUNPATH"terminations_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
 
 	#Convert detect and forkSense files to bedgraphs, StdErr saved to bedgraph_output.txt
 	echo "make bedgraphs"
