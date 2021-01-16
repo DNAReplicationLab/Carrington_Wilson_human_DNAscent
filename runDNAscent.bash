@@ -2,7 +2,7 @@
 
 #----------------------------------------------------------
 # Copyright 2020-2021 Rosemary H C Wilson (University of Oxford) and Conrad Nieduszynski (Earlham Institute)
-# Written by Rose Wilson (University of Oxford) and Conrad Nieduszynski (Earlham Institute)
+# Written by Rosemary H C Wilson (University of Oxford) and Conrad Nieduszynski (Earlham Institute)
 # This software is licensed under GPL-3.0.  You should have
 # received a copy of the license with this software.  If
 # not, please Email the author.
@@ -20,12 +20,12 @@
 # OUTS: None
 function usage() {
 	cat << EOF
-Usage: bash runDNAscent.bash -f </path/to/fast5/files> -a </path/to/save/whole/run/files>
--o <name for ouput directory> -r </path/to/reference/genome> [ optional: -g | -m ]
-[ optional: -q </path/to/fastq> -k -d <detect threshold> -n <output name> ]
+Usage: bash runDNAscent.bash -a </path/to/save/whole/run/files> -o <name_for_ouput directory> 
+-r </path/to/reference/genome> [ optional: -g | -m ] [ optional: -f </path/to/fast5/files> 
+-q </path/to/fastq> -k -d <detect threshold> -n <output name> -v -E -h]
 [optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
 
-Purpose: to process fast5 (or bam) files from nanopore run through to the end of DNAscent.
+Purpose: to process fast5, fastq or bam files from nanopore for BrdU incorporation using DNAscent 2.0.
 
 Before you start create a folder where you would like to save whole run files (-a below),
 this will be </folder/to/save/run/files>
@@ -37,16 +37,17 @@ Can use absolute or relative paths.
 
 Required parameters/flags:
 
-
+	-a 			</path/to/save/whole/run/files>
+	-o 			<name_for_ouput directory>
 Optional parameters/flags:
 
-	-E|--EI			run on EI HPC. Default is to run locally (on Nieduszynski server in Oxford)
-	-h|--help		Displays this help
-	-v|--verbose	Displays verbose output
-	-g				to do basecalling and mapping, default is off, if off requires indexed bam
+	-E|--EI				run on EI HPC. Default is to run locally (on Nieduszynski server in Oxford)
+	-h|--help			Displays this help
+	-v|--verbose			Displays verbose output
+	-g				perform basecalling and mapping, default is off, if off requires indexed bam
 					file called alignments.sorted, and sequencing_summary.txt to be present in
-					-a </path/to/save/run/files>. Make sure -a doesn't contain any files/folders
-					that could be overwritten.
+					-a </path/to/save/run/files> or use -m to map from fastq. 
+					Make sure -a doesn't contain any files/folders that could be overwritten.
 	-m				to do just mapping. Default it off. If using this option it requires
 					reads.fastq file in -a directory. Or chose other file with -q.
 	-q				Use with -m, path to fastq file if not called reads.fastq and in -a directory.
@@ -79,6 +80,7 @@ function die() {
 # OUTS: Variables indicating command-line parameters and options
 function parse_params() {
 	# default values of variables set from params
+	RUNSCRIPT="UoO"
 	FAST5=''
 	BASECALL="FALSE"
 	MAPPING="FALSE"
@@ -96,12 +98,12 @@ function parse_params() {
 				usage
 				exit 0
 				;;
-            -v | --verbose)
-                verbose=true
-                ;;
-            -E | --EI)
-            	earlham_HPC=true
-            	;;
+         		-v | --verbose)
+         		       verbose=true
+         		       ;;
+         		-E | --EI)
+         		   	RUNSCRIPT="EI"
+         		   	;;
 			-f )	
 				FAST5="${2-}"
 				shift
@@ -140,7 +142,7 @@ function parse_params() {
 				shift
 				;;
 			-L )
-				REGION="$1""${2-}"
+				REGION="${2-}"
 				shift
 				;;
 			-s )
@@ -217,7 +219,7 @@ function script_init() {
     readonly ta_none="$(tput sgr0 2> /dev/null || true)"
 
 	# Set the bam file to be used with DNAscent dependent upon whether subregion requested
-	if [ "$REGION" == true ] || [ "$SUBSAMPLE" == true ]; then
+	if [ "$REGION" != "FALSE" ] || [ "$SUBSAMPLE" != "FALSE" ]; then
 		BAM="$RUNPATH""$SAVEDIR"/"$NAME".bam
 		else
 		BAM="$RUNPATH"alignments.sorted
@@ -233,7 +235,8 @@ function script_init() {
 	#make folders and files
  	mkdir "$RUNPATH""$SAVEDIR"
 	mkdir "$RUNPATH""$SAVEDIR"/logfiles
-	touch "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt "$RUNPATH""$SAVEDIR"/logfiles/bedgraph_output.txt
+	touch "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt 
+	touch "$RUNPATH""$SAVEDIR"/logfiles/bedgraph_output.txt
     
     readonly guppy_model="dna_r9.4.1_450bps_fast.cfg"			# guppy model to use for basecalling
 }
@@ -243,7 +246,8 @@ function script_init() {
 # OUTS: None
 # NOTE: 
 function print_variables() {
-	if [ "$verbose" = true ]; then
+	if [ "$verbose" == true ]; then
+		echo Run script at $RUNSCRIPT
 		echo BASECALL and mapping = $BASECALL
 		echo MAPPING only = $MAPPING
 		echo FORKSENSE = $FORKSENSE
@@ -298,7 +302,7 @@ parse_params "$@"
 script_init "$@"
 
 # Compute specific script initialisation (either UoO Nieduszynski (local) or EI HPC)
-if [ "$earlham_HPC" = true ]; then
+if [ "$RUNSCRIPT" == "EI" ]; then
 	EI_HPC_init
 	else
 	UoO_init
@@ -308,11 +312,11 @@ fi
 print_variables
 
 #optional basecalling (guppy) and mapping (minimap) if starting from fast5 files
-if [ "$BASECALL" = true ]; then
+if [ "$BASECALL" == true ]; then
 	basecall_fn
 fi
 
-if [ "$BASECALL" = true ] || [ "$MAPPING" = true ]; then
+if [ "$BASECALL" == true ] || [ "$MAPPING" == true ]; then
 	#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
 	minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt \
 		| samtools view -Sb - \
@@ -325,9 +329,10 @@ if [ "$BASECALL" = true ] || [ "$MAPPING" = true ]; then
 	echo
 fi
 
-#if you want to make a smaller bam to perform DNAscent on either specific regions or a subsample of full bam, provide arguments -L (bed file with list of regions to keep) or -s (INT.FRAC for samtools view -s subsample flag), don't use together, also provide -n <name>
+# if you want to make a smaller bam to perform DNAscent on either specific regions or a subsample of full bam, 
+# provide arguments -L (bed file with list of regions to keep) or -s (INT.FRAC for samtools view -s subsample flag), don't use together, also provide -n <name>
 
-if [ "$REGION" = true ]; then
+if [ "$REGION" != "FALSE" ]; then
 	samtools view -h -b -M -L "$REGION" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
 	samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
 	elif [ "$SUBSAMPLE" != "FALSE" ]; then
@@ -346,7 +351,7 @@ echo "$RUNPATH""$SAVEDIR" detect complete.
 echo
 
 #optional (-f) run DNAscent 2.0 forksense , StdErr saved to forkSense_output.txt
-if [ "$FORKSENSE" = true ]; then
+if [ "$FORKSENSE" == true ]; then
 	touch "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
 	echo "DNAscent forkSense"
 	DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".forkSense --markOrigins --markTerminations 2> "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
