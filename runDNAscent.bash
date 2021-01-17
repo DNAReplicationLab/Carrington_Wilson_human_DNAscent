@@ -412,7 +412,7 @@ if [[ "$FORKSENSE" == true ]]; then
 	mv "$RUNPATH"origins_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
 	mv "$RUNPATH"terminations_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
 
-	if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".forksense ]]; then
+	if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense ]]; then
 		echo "$RUNPATH""$SAVEDIR" forksense complete.
 		echo
 	else
@@ -420,7 +420,8 @@ if [[ "$FORKSENSE" == true ]]; then
 	fi
 fi
 
-	#Convert detect and forkSense files to bedgraphs, StdErr saved to bedgraph_output.txt
+#Convert detect and forkSense files to bedgraphs, StdErr saved to bedgraph_output.txt
+if [[ "$FORKSENSE" == true ]]; then
 	echo "make bedgraphs"
 	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense -o "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs 2> "$RUNPATH"/"$SAVEDIR"/logfiles/bedgraph_output.txt
 	else
@@ -432,7 +433,6 @@ fi
 if [[ -d "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs ]]; then
 	echo
 	echo "$RUNPATH""$SAVEDIR" bedgraphs saved.
-	echo
 	else
 	die "Exit, $NAME.bedgrpahs folder not found. Check bedgraphs logfile"
 fi
