@@ -21,9 +21,10 @@
 function usage() {
 	cat << EOF
 Usage: bash runDNAscent.bash -a </path/to/save/whole/run/files> -o <name_for_ouput directory> -f </path/to/fast5/files>
--r </path/to/reference/genome> 
-[ optional: -g | -m ] [ optional: -q </path/to/fastq> -k -d <detect threshold> -n <output name> -v -E -h] 
-[optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
+
+[ optional: -g | -m , require: -r </path/to/reference/genome>]
+[ optional: -q </path/to/fastq> -k -d <detect threshold> -n <output name> -v -E -h]
+[ optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
 
 Purpose: to process fast5, fastq or bam files from nanopore for BrdU incorporation using DNAscent 2.0.
 
@@ -50,11 +51,12 @@ Optional parameters/flags:
 	-v|--verbose			Displays verbose output
 	-g				perform basecalling and mapping, default is off, if off requires indexed bam
 					file called alignments.sorted, and sequencing_summary.txt to be present in
-					-a </path/to/save/run/files> or use -m to map from fastq. 
+					-a </path/to/save/run/files> or use -m to map from fastq.
 					Make sure -a doesn't contain any files/folders that could be overwritten.
 	-m				to do just mapping. Default it off. If using this option it requires
 					reads.fastq file in -a directory. Or chose other file with -q.
 	-q				Use with -m, path to fastq file if not called reads.fastq and in -a directory.
+	-r				reference genome for mapping
 	-k				to use forkSense, default off
 	-d				default is 1000 nts, same as default for dnascent detect
 	-n				default is output, suggested to use other name especially if using -L or -s
@@ -162,10 +164,30 @@ function parse_params() {
 	args=("$@")
 
 	# check required params
-	[[ -z "${FAST5-}" ]] && die "Missing required parameter: fast5"
-	# TODO: add equivalent lines for other required params
+	[[ -z "${FAST5-}" ]] && die "Missing required parameter: -f </path/to/fast5>"
+	[[ -z "${RUNPATH-}" ]] && die "Missing required parameter: -a </path/to/save/whole/run/files>"
+	[[ -z "${SAVEDIR-}" ]] && die "Missing required parameter: -o <name_for_ouput directory>"
+
+	if [ "$BASECALL" == true ] || [ "$MAPPING" == true ] ; then
+		[[ -z "${REFGENOME-}" ]] && die "Missing required parameter: -r </path/to/refgenome>"
+	fi
 
 	# TODO: add check that incompatible params aren't selected (e.g. -L and -s , if this really shouldn't ever be done)
+
+	if [ "$MAPPING" == true ]; then
+		[ ! -f "$RUNPATH"reads.fastq ] && [ "$FASTQTEMP" == "DEFAULT" ] \
+		&& die "Require reads.fastq in -a directory or specify -q </path/to/fastq>"
+	fi
+
+	if [ "$BASECALL" == "FALSE" ] && [ "$MAPPING" == "FALSE" ]; then
+		[ ! -f "$RUNPATH"alignments.sorted ] || [ ! -f "$RUNPATH"alignments.sorted.bai ] \
+		&& die "If not basecalling and/or mapping, require indexed alignments.sorted bam in -a directory"
+	fi
+
+# @Conrad - how to return 0 exit code from die? This returns 1 exit code, only advice not required
+	if [ "$REGION" != "FALSE" ] || [ "$SUBSAMPLE" != "FALSE" ]; then
+		[ "${NAME}" == "output" ] && die "Recommended to provide -n name with -s or -L" 0
+	fi
 
 	# commented out - there aren't any required arguments
 	#[[ ${#args[@]} -eq 0 ]] && die "Missing script arguments"
@@ -310,6 +332,8 @@ fi
 
 #print variables to check
 print_variables
+
+exit
 
 #optional basecalling (guppy) and mapping (minimap) if starting from fast5 files
 if [ "$BASECALL" == true ]; then
