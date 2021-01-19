@@ -20,10 +20,12 @@
 # OUTS: None
 function usage() {
 	cat << EOF
-Usage: bash runDNAscent.bash -a </path/to/save/whole/run/files> -o <name_for_ouput directory> 
--r </path/to/reference/genome> [ optional: -g | -m ] [ optional: -f </path/to/fast5/files> 
--q </path/to/fastq> -k -d <detect threshold> -n <output name> -v -E -h]
-[optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
+
+Usage: bash runDNAscent.bash -a </path/to/save/whole/run/files> -o <name_for_ouput directory> -f </path/to/fast5/files>
+
+[ optional: -g | -m , require: -r </path/to/reference/genome>]
+[ optional: -q </path/to/fastq> -k -d <detect threshold> -n <output name> -v -E -h]
+[ optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
 
 Purpose: to process fast5, fastq or bam files from nanopore for BrdU incorporation using DNAscent 2.0.
 
@@ -37,8 +39,12 @@ Can use absolute or relative paths.
 
 Required parameters/flags:
 
-	-a 			</path/to/save/whole/run/files>
-	-o 			<name_for_ouput directory>
+	-a 				fastq files, sequencing summary and indexed bam of whole run saved here
+	-o 				create and populate folder with any filtered indexed bam files, DNAscent
+					detect and forkSense files so that you can reanalyse reads with different
+					parameters without overwriting eg whole run or just specific chromosomes
+	-f				fast5 files
+
 Optional parameters/flags:
 
 	-E|--EI				run on EI HPC. Default is to run locally (on Nieduszynski server in Oxford)
@@ -46,21 +52,19 @@ Optional parameters/flags:
 	-v|--verbose			Displays verbose output
 	-g				perform basecalling and mapping, default is off, if off requires indexed bam
 					file called alignments.sorted, and sequencing_summary.txt to be present in
-					-a </path/to/save/run/files> or use -m to map from fastq. 
+					-a </path/to/save/run/files> or use -m to map from fastq.
 					Make sure -a doesn't contain any files/folders that could be overwritten.
 	-m				to do just mapping. Default it off. If using this option it requires
 					reads.fastq file in -a directory. Or chose other file with -q.
 	-q				Use with -m, path to fastq file if not called reads.fastq and in -a directory.
-	-a				fastq files, sequencing summary and indexed bam of whole run saved here
-	-o				create and populate folder with any filtered indexed bam files, DNAscent
-					detect and forkSense files so that you can reanalyse reads with different
-					parameters without overwriting eg whole run or just specific chromosomes
+	-r				reference genome for mapping
 	-k				to use forkSense, default off
 	-d				default is 1000 nts, same as default for dnascent detect
 	-n				default is output, suggested to use other name especially if using -L or -s
 	-L				to generate bam for defined genomic regions and use this bam for dnascent
 					(-L flag in samtools view)
 	-s				to generate subsampled bam and use this bam for dnascent (-s flag in samtools view)
+
 EOF
 }
 
@@ -72,6 +76,7 @@ function die() {
   local msg=$1
   local code=${2-1}				# default exit status 1
   echo "$msg"
+  echo
   exit "$code"
 }
 
@@ -104,7 +109,7 @@ function parse_params() {
          		-E | --EI)
          		   	RUNSCRIPT="EI"
          		   	;;
-			-f )	
+			-f )
 				FAST5="${2-}"
 				shift
 				;;
@@ -158,18 +163,45 @@ function parse_params() {
 		esac
 		shift
 	done
-	
+
 	args=("$@")
 
-	# check required params
-	[[ -z "${FAST5-}" ]] && die "Missing required parameter: fast5"
-	# TODO: add equivalent lines for other required params
+	# check required params and not overwriting
+	[[ -z "${FAST5-}" ]] && die "Missing required parameter: -f </path/to/fast5>"
+	[[ -z "${RUNPATH-}" ]] && die "Missing required parameter: -a </path/to/save/whole/run/files>"
+	[[ -z "${SAVEDIR-}" ]] && die "Missing required parameter: -o <name_for_ouput directory>"
+
+	if [[ "$BASECALL" == true || "$MAPPING" == true ]] ; then
+		[[ -z "${REFGENOME-}" ]] && die "Missing required parameter: -r </path/to/refgenome>"
+	fi
+
+	if [[ "$BASECALL" == true ]] ; then
+		[[ -f "$RUNPATH"reads.fastq ]] && die "Reads.fastq already exists in -a directory"
+	fi
 
 	# TODO: add check that incompatible params aren't selected (e.g. -L and -s , if this really shouldn't ever be done)
 
+	if [[ "$MAPPING" == true ]]; then
+		[[ ! -f "$RUNPATH"reads.fastq && "$FASTQTEMP" == "DEFAULT" ]] \
+		&& die "Require reads.fastq in -a directory or specify -q </path/to/fastq>"
+		[[ -f "$RUNPATH"alignments.sorted ]] && die "Alignments.sorted already exists in -a directory"
+	fi
+
+	if [[ "$BASECALL" == "FALSE"  &&  "$MAPPING" == "FALSE" ]]; then
+		[[ ! -f "$RUNPATH"alignments.sorted || ! -f "$RUNPATH"alignments.sorted.bai ]] \
+		&& die "If not basecalling and/or mapping, require indexed alignments.sorted bam in -a directory"
+	fi
+
+	[[ -d "$RUNPATH""$SAVEDIR" ]] && die "Chose different name for -o save dir, already exists"
+
+# @Conrad - how to return 0 exit code from die? This returns 1 exit code, only advice not required
+	if [[ "$REGION" != "FALSE" || "$SUBSAMPLE" != "FALSE" ]]; then
+		[[ "${NAME}" == "output" ]] && die "Recommended to provide -n name with -s or -L" 0
+	fi
+
 	# commented out - there aren't any required arguments
 	#[[ ${#args[@]} -eq 0 ]] && die "Missing script arguments"
-	
+
 	return 0
 }
 
@@ -178,6 +210,9 @@ function parse_params() {
 # OUTS: None
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function basecall_fn() {
+	# check not overwriting
+#	[[ -f "$RUNPATH"reads.fastq ]] && die "Exit as reads.fastq already exists in -a directory"
+
 	mkdir "$RUNPATH""$SAVEDIR"/logfiles/guppy_logfiles
 	touch "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt
 
@@ -190,9 +225,13 @@ function basecall_fn() {
 	mv "$RUNPATH"*.fastq "$RUNPATH"fastq_files
 	cat "$RUNPATH"fastq_files/*.fastq > "$RUNPATH"reads.fastq
 
-	echo
-	echo "$RUNPATH" fastq files generated and tidied.
-	echo
+	# check worked
+	if [[ -f "$RUNPATH"reads.fastq ]]; then
+		echo "$RUNPATH fastq files generated and tidied"
+		echo
+		else
+		die "Exit, $RUNPATH reads.fastq not made, check guppy log files"
+	fi
 }
 
 # DESC: Generic script initialisation
@@ -219,34 +258,34 @@ function script_init() {
     readonly ta_none="$(tput sgr0 2> /dev/null || true)"
 
 	# Set the bam file to be used with DNAscent dependent upon whether subregion requested
-	if [ "$REGION" != "FALSE" ] || [ "$SUBSAMPLE" != "FALSE" ]; then
+	if [[ "$REGION" != "FALSE" || "$SUBSAMPLE" != "FALSE" ]]; then
 		BAM="$RUNPATH""$SAVEDIR"/"$NAME".bam
 		else
 		BAM="$RUNPATH"alignments.sorted
 	fi
 
 	# Set the location of fastq files as specified by user
-	if [ "$FASTQTEMP" == "DEFAULT" ]; then
+	if [[ "$FASTQTEMP" == "DEFAULT" ]]; then
 		FASTQ="$RUNPATH"reads.fastq
 		else
 		FASTQ="$FASTQTEMP"
 	fi
- 
+
 	#make folders and files
  	mkdir "$RUNPATH""$SAVEDIR"
 	mkdir "$RUNPATH""$SAVEDIR"/logfiles
-	touch "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt 
+	touch "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt
 	touch "$RUNPATH""$SAVEDIR"/logfiles/bedgraph_output.txt
-    
+
     readonly guppy_model="dna_r9.4.1_450bps_fast.cfg"			# guppy model to use for basecalling
 }
 
 # DESC: Prints variables those variables that have been set, if verbose true
 # ARGS: None
 # OUTS: None
-# NOTE: 
+# NOTE:
 function print_variables() {
-	if [ "$verbose" == true ]; then
+	if [[ "$verbose" == true ]]; then
 		echo Run script at $RUNSCRIPT
 		echo BASECALL and mapping = $BASECALL
 		echo MAPPING only = $MAPPING
@@ -261,6 +300,7 @@ function print_variables() {
 		echo SUBSAMPLE = $SUBSAMPLE
 		echo "BAM to use for detect" = $BAM
  		echo "Fastq file to use" = $FASTQ
+		echo
 	fi
 }
 
@@ -271,11 +311,11 @@ function print_variables() {
 function UoO_init() {
 	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
 	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
-	export PATH=$PATH:/data/software_local/ont-guppy/bin		# path to guppy
-	export PATH=$PATH:/data/software_local/minimap2-2.10		# path to minimap2
-	export PATH=$PATH:/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin				# path to DNAscent v2
+	export PATH=/data/software_local/guppy_legacy/v3.6/bin:$PATH		# path to guppy
+	export PATH=/data/software_local/minimap2-2.10:$PATH		# path to minimap2
+	export PATH=/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin:$PATH				# path to DNAscent v2
 	readonly python_utils_dir="/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils"	# path to DNAscent v2 utilities
-	readonly guppy_model_dir="/data/software_local/ont-guppy/data/"										# path to guppy model files
+	readonly guppy_model_dir="/data/software_local/guppy_legacy/v3.6/data/"										# path to guppy model files
 }
 
 # DESC: Script initialisation for use on EI HPC at NRP
@@ -302,7 +342,7 @@ parse_params "$@"
 script_init "$@"
 
 # Compute specific script initialisation (either UoO Nieduszynski (local) or EI HPC)
-if [ "$RUNSCRIPT" == "EI" ]; then
+if [[ "$RUNSCRIPT" == "EI" ]]; then
 	EI_HPC_init
 	else
 	UoO_init
@@ -312,11 +352,11 @@ fi
 print_variables
 
 #optional basecalling (guppy) and mapping (minimap) if starting from fast5 files
-if [ "$BASECALL" == true ]; then
+if [[ "$BASECALL" == true ]]; then
 	basecall_fn
 fi
 
-if [ "$BASECALL" == true ] || [ "$MAPPING" == true ]; then
+if [[ "$BASECALL" == true || "$MAPPING" == true ]]; then
 	#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
 	minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt \
 		| samtools view -Sb - \
@@ -324,48 +364,76 @@ if [ "$BASECALL" == true ] || [ "$MAPPING" == true ]; then
 
 	samtools index "$RUNPATH"alignments.sorted
 
-	echo
-	echo "$FASTQ" reads mapped to reference.
-	echo
+	if [[ -f "$RUNPATH"alignments.sorted ]] ; then
+		echo "$FASTQ" reads mapped to reference.
+		echo
+		else
+		die "Exit, $RUNPATH alignments.sorted not made, check minimap log files"
+	fi
 fi
 
-# if you want to make a smaller bam to perform DNAscent on either specific regions or a subsample of full bam, 
+# if you want to make a smaller bam to perform DNAscent on either specific regions or a subsample of full bam,
 # provide arguments -L (bed file with list of regions to keep) or -s (INT.FRAC for samtools view -s subsample flag), don't use together, also provide -n <name>
 
-if [ "$REGION" != "FALSE" ]; then
+if [[ "$REGION" != "FALSE" ]]; then
 	samtools view -h -b -M -L "$REGION" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
 	samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
-	elif [ "$SUBSAMPLE" != "FALSE" ]; then
+	elif [[ "$SUBSAMPLE" != "FALSE" ]]; then
 	samtools view -h -b -s "$SUBSAMPLE" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
         samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
 fi
 
-#run DNAscent 2.0 index and detect. StdErr saved to detect_output.txt. If you chose to make a smaller region bam then DNAscent uses this bam.
-echo "DNAscent index"
-DNAscent index -f "$FAST5" -s "$RUNPATH"sequencing_summary.txt -o "$RUNPATH"index.dnascent 2> "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt
-echo "DNAscent detect"
-DNAscent detect -b "$BAM" -r "$REFGENOME" -i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$NAME".detect -t 50 --GPU 0 -l "$DETECTTHRESHOLD" 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt
-
-echo
-echo "$RUNPATH""$SAVEDIR" detect complete.
-echo
-
-#optional (-f) run DNAscent 2.0 forksense , StdErr saved to forkSense_output.txt
-if [ "$FORKSENSE" == true ]; then
-	touch "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
-	echo "DNAscent forkSense"
-	DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".forkSense --markOrigins --markTerminations 2> "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
-	echo "$RUNPATH""$SAVEDIR" forksense complete.
-
-	#Convert detect and forkSense files to bedgraphs, StdErr saved to bedgraph_output.txt
-	echo "make bedgraphs"
-	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense -o "$RUNPATH""$SAVEDIR"/bedgraphs/ 2> "$RUNPATH"/"$SAVEDIR"/logfiles/bedgraph_output.txt
-	else
-	#Just convert detect file to bedgraphs
-	echo "make bedgraphs"
-	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/bedgraphs/ 2> "$RUNPATH""$SAVEDIR"/logfiles/bedgraph_output.txt
+#run DNAscent 2.0 index (if necessary) and detect. StdErr saved to detect_output.txt. If you chose to make a smaller region bam then DNAscent uses this bam.
+if [[ ! -f "$RUNPATH"index.dnascent ]]; then
+	echo "DNAscent index"
+	echo
+	DNAscent index -f "$FAST5" -s "$RUNPATH"sequencing_summary.txt -o "$RUNPATH"index.dnascent 2> "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt
 fi
 
 echo
-echo "$RUNPATH""$SAVEDIR" bedgraphs saved.
+echo "DNAscent detect"
 echo
+DNAscent detect -b "$BAM" -r "$REFGENOME" -i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$NAME".detect -t 50 --GPU 0 -l "$DETECTTHRESHOLD" 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt
+
+if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".detect ]] ; then
+	echo "$RUNPATH""$SAVEDIR" detect complete.
+	echo
+	else
+	die "Exit, detect file not made, check detect log files"
+fi
+
+# Make bedgraphs with optional (-f) run DNAscent 2.0 forksense , StdErr saved to forkSense_output.txt
+if [[ "$FORKSENSE" == true ]]; then
+	touch "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
+	echo "DNAscent forkSense"
+	echo
+	DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".forkSense --markOrigins --markTerminations 2> "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
+	# to fix forksense save location bug
+	mv "$RUNPATH"origins_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
+	mv "$RUNPATH"terminations_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
+
+	if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense ]]; then
+		echo "$RUNPATH""$SAVEDIR" forksense complete.
+		echo
+	else
+	die "Exit, forksense file not found, check forksense log file"
+	fi
+fi
+
+#Convert detect and forkSense files to bedgraphs, StdErr saved to bedgraph_output.txt
+if [[ "$FORKSENSE" == true ]]; then
+	echo "make bedgraphs"
+	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense -o "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs 2> "$RUNPATH"/"$SAVEDIR"/logfiles/bedgraph_output.txt
+	else
+	#Just convert detect file to bedgraphs
+	echo "make bedgraphs"
+	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs 2> "$RUNPATH""$SAVEDIR"/logfiles/bedgraph_output.txt
+fi
+
+if [[ -d "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs ]]; then
+	echo
+	echo "$RUNPATH""$SAVEDIR" bedgraphs saved.
+	else
+	die "Exit, $NAME.bedgrpahs folder not found. Check bedgraphs logfile"
+fi
+
