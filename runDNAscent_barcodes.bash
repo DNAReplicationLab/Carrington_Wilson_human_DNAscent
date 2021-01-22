@@ -6,7 +6,7 @@
 # Usage: bash runDNAscent.bash -f </path/to/fast5/files> -a </path/to/save/whole/run/files> -o <name for ouput directory> -r </path/to/reference/genome> [ optional: -g | -m ] [ optional: -b <barcode_kit_name> -k -d <detect threshold> -n <output name> ] [optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
 
 # If using forksense run in -a directory as there was a bug (now fixed?) that origin and termination bed files are saved to pwd then move to -o.
-# Can use absolute or relative paths.
+# MUST use absolute paths.
 
 #optional:
 # -g to do basecalling and mapping, default is off, if off requires indexed bam file called alignments.sorted, and sequencing_summary.txt to be present in barcode folders. Make sure -a doesn't contain any files/folders that could be overwritten.
@@ -23,9 +23,12 @@
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
 
-# path to guppy legacy as current guppy not working with GPU currently
-export PATH=/data/software_local/guppy_legacy/v3.6/bin:$PATH
+# set paths
+export PATH=/data/software_local/guppy_legacy/v3.6/bin:$PATH # path to guppy
 guppy_model_dir="/data/software_local/guppy_legacy/v3.6/data/"
+export PATH=/data/software_local/minimap2-2.10:$PATH            # path to minimap2
+export PATH=/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin:$PATH                           # path to DNAscent v2
+python_utils_dir="/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils"       # path to DNAscent v2 utilities
 
 #set defualt options
 BASECALL="FALSE"
@@ -112,7 +115,7 @@ if [ "$BASECALL" != "FALSE" ]; then
 
 	#run DNAscent 2.0 index. StdErr saved to index_output.txt. If you chose to make a smaller region bam then DNAscent uses this bam.
 	echo "DNAscent index"
-	/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/DNAscent index -f "$FAST5" -s "$RUNPATH"sequencing_summary.txt -o "$RUNPATH"index.dnascent 2> "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt
+	DNAscent index -f "$FAST5" -s "$RUNPATH"sequencing_summary.txt -o "$RUNPATH"index.dnascent 2> "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt
 
 fi
 
@@ -126,7 +129,7 @@ for BAR in $( cat "$RUNPATH"barcodes.txt ); do
 		FASTQ="$RUNPATH""$BAR"/"$BAR".reads.fastq
 
 		#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
-		/data/software_local/minimap2-2.10/minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/"$BAR".minimap_output.txt | samtools view -Sb - | samtools sort - -o "$RUNPATH""$BAR"/"$BAR".alignments.sorted
+		minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/"$BAR".minimap_output.txt | samtools view -Sb - | samtools sort - -o "$RUNPATH""$BAR"/"$BAR".alignments.sorted
 
 		samtools index "$RUNPATH""$BAR"/"$BAR".alignments.sorted
 
@@ -160,7 +163,7 @@ for BAR in $( cat "$RUNPATH"barcodes.txt ); do
         	BAM="$RUNPATH""$BAR"/"$BAR".alignments.sorted
 	fi
 
-	/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/DNAscent detect -b "$BAM" -r "$REFGENOME" -i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".detect -t 50 --GPU 0 -l "$DETECTTHRESHOLD" 2> "$RUNPATH""$SAVEDIR"/logfiles/"$BAR".detect_output.txt
+	DNAscent detect -b "$BAM" -r "$REFGENOME" -i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".detect -t 50 --GPU 0 -l "$DETECTTHRESHOLD" 2> "$RUNPATH""$SAVEDIR"/logfiles/"$BAR".detect_output.txt
 
 	echo
 	echo "$RUNPATH""$SAVEDIR" "$BAR" detect complete.
@@ -171,7 +174,7 @@ for BAR in $( cat "$RUNPATH"barcodes.txt ); do
 		touch "$RUNPATH""$SAVEDIR"/logfiles/"$BAR".forkSense_output.txt
 		echo "DNAscent forkSense"
 		echo
-		/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin/DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".forkSense --markOrigins --markTerminations 2> "$RUNPATH""$SAVEDIR"/logfiles/"$BAR".forkSense_output.txt
+		DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".forkSense --markOrigins --markTerminations 2> "$RUNPATH""$SAVEDIR"/logfiles/"$BAR".forkSense_output.txt
 		#move and rename forksense bed outputs to fix bug, may need to remove
 		mv ./origins_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".origins_DNAscent_forkSense.bed
 		mv ./terminations_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".terminations_DNAscent_forkSense.bed
@@ -182,12 +185,12 @@ for BAR in $( cat "$RUNPATH"barcodes.txt ); do
 		#Convert detect and forkSense files to bedgraphs, StdErr saved to bedgraph_output.txt
 		echo
 		echo "make bedgraphs"
-		python /home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".detect -f "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".forkSense -o "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".bedgraphs/ 2> "$RUNPATH"/"$SAVEDIR"/logfiles/"$BAR".bedgraph_output.txt
+		python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".detect -f "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".forkSense -o "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".bedgraphs/ 2> "$RUNPATH"/"$SAVEDIR"/logfiles/"$BAR".bedgraph_output.txt
 		else
 		#Just convert detect file to bedgraphs
 		echo
 		echo "make bedgraphs"
-		python /home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".bedgraphs/ 2> "$RUNPATH""$SAVEDIR"/logfiles/"$BAR".bedgraph_output.txt
+		python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$BAR"."$NAME".bedgraphs/ 2> "$RUNPATH""$SAVEDIR"/logfiles/"$BAR".bedgraph_output.txt
 	fi
 
 	echo
