@@ -22,8 +22,9 @@ function usage() {
 	cat << EOF
 
 Usage: bash runDNAscent.bash -a </path/to/save/whole/run/files> -o <name_for_ouput directory> -f </path/to/fast5/files>
+-r </path/to/reference/genome>
 
-[ optional: -g | -m , require: -r </path/to/reference/genome>]
+[ optional: -g | -m]
 [ optional: -q </path/to/fastq> -k -d <detect threshold> -n <output name> -v -E -h]
 [ optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
 
@@ -44,6 +45,7 @@ Required parameters/flags:
 					detect and forkSense files so that you can reanalyse reads with different
 					parameters without overwriting eg whole run or just specific chromosomes
 	-f				fast5 files
+	-r				reference genome for mapping
 
 Optional parameters/flags:
 
@@ -57,7 +59,6 @@ Optional parameters/flags:
 	-m				to do just mapping. Default it off. If using this option it requires
 					reads.fastq file in -a directory. Or chose other file with -q.
 	-q				Use with -m, path to fastq file if not called reads.fastq and in -a directory.
-	-r				reference genome for mapping
 	-k				to use forkSense, default off
 	-d				default is 1000 nts, same as default for dnascent detect
 	-n				default is output, suggested to use other name especially if using -L or -s
@@ -170,13 +171,15 @@ function parse_params() {
 	[[ -z "${FAST5-}" ]] && die "Missing required parameter: -f </path/to/fast5>"
 	[[ -z "${RUNPATH-}" ]] && die "Missing required parameter: -a </path/to/save/whole/run/files>"
 	[[ -z "${SAVEDIR-}" ]] && die "Missing required parameter: -o <name_for_ouput directory>"
-
-	if [[ "$BASECALL" == true || "$MAPPING" == true ]] ; then
-		[[ -z "${REFGENOME-}" ]] && die "Missing required parameter: -r </path/to/refgenome>"
-	fi
+	[[ -z "${REFGENOME-}" ]] && die "Missing required parameter: -r </path/to/refgenome>"
 
 	if [[ "$BASECALL" == true ]] ; then
 		[[ -f "$RUNPATH"reads.fastq ]] && die "Reads.fastq already exists in -a directory"
+	fi
+
+	if [[ "$BASECALL" == "FALSE" ]] ; then
+		[[ ! -f "$RUNPATH"sequencing_summary.txt ]] \
+		&& die "If not basecalling, require sequencing_summary.txt in -a directory"
 	fi
 
 	# TODO: add check that incompatible params aren't selected (e.g. -L and -s , if this really shouldn't ever be done)
