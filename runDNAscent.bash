@@ -295,6 +295,8 @@ function dnascent_fn() {
 		else
 		die "Exit, detect file not made, check detect log files"
 	fi
+	echo "make bedgraphs"
+	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs 2> "$RUNPATH""$SAVEDIR"/logfiles/dnascent_bedgraph_output.txt
 }
 
 # DESC: Function to run DNAscent 2.0 forkSense
@@ -316,6 +318,9 @@ function forksense_fn() {
 	else
 	die "Exit, forksense file not found, check forksense log file"
 	fi
+	echo "make bedgraphs"
+	python "$python_utils_dir"/dnascent2bedgraph.py -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense -o "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs 2> "$RUNPATH"/"$SAVEDIR"/logfiles/forkSense_bedgraph_output.txt
+
 }
 
 # DESC: Generic script initialisation
@@ -455,22 +460,17 @@ if [[ "$REGION" != "FALSE" ]]; then
 	sub_bam_fn
 fi
 
-#run DNAscent 2.0 index (if necessary) and detect. StdErr saved to detect_output.txt. If you chose to make a smaller region bam then DNAscent uses this bam.
+# run DNAscent 2.0 index (if necessary) and detect.
+# StdErr saved to detect_output.txt.
+# If you chose to make a smaller region bam then DNAscent uses this bam.
+# Also generates bedgraphs from the detect files
 dnascent_fn
 
-# Make bedgraphs with optional (-f) run DNAscent 2.0 forksense , StdErr saved to forkSense_output.txt
+# Make bedgraphs with optional (-f) run DNAscent 2.0 forksense,
+# StdErr saved to forkSense_output.txt
+# Also generate bedgraphs from the forksense output
 if [[ "$FORKSENSE" == true ]]; then
 	forksense_fn
-fi
-
-#Convert detect and forkSense files to bedgraphs, StdErr saved to bedgraph_output.txt
-if [[ "$FORKSENSE" == true ]]; then
-	echo "make bedgraphs"
-	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense -o "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs 2> "$RUNPATH"/"$SAVEDIR"/logfiles/bedgraph_output.txt
-	else
-	#Just convert detect file to bedgraphs
-	echo "make bedgraphs"
-	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs 2> "$RUNPATH""$SAVEDIR"/logfiles/bedgraph_output.txt
 fi
 
 if [[ -d "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs ]]; then
