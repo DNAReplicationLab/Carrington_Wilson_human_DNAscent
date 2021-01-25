@@ -234,6 +234,26 @@ function basecall_fn() {
 	fi
 }
 
+# DESC: mapping fastq data with minimap2 to generate sorted bam file (with samtools)
+# ARGS: None
+# OUTS: None
+# NOTE: This still needs to be generalised and adapted for SLURM use
+function mapping_fn() {
+	#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
+	minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt \
+		| samtools view -Sb - \
+		| samtools sort - -o "$RUNPATH"alignments.sorted
+
+	samtools index "$RUNPATH"alignments.sorted
+
+	if [[ -f "$RUNPATH"alignments.sorted ]] ; then
+		echo "$FASTQ" reads mapped to reference.
+		echo
+		else
+		die "Exit, $RUNPATH alignments.sorted not made, check minimap log files"
+	fi
+}
+
 # DESC: Generic script initialisation
 # ARGS: $@ (optional): Arguments provided to the script
 # OUTS: $orig_cwd: The current working directory when the script was run
@@ -357,20 +377,9 @@ if [[ "$BASECALL" == true ]]; then
 fi
 
 if [[ "$BASECALL" == true || "$MAPPING" == true ]]; then
-	#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
-	minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt \
-		| samtools view -Sb - \
-		| samtools sort - -o "$RUNPATH"alignments.sorted
-
-	samtools index "$RUNPATH"alignments.sorted
-
-	if [[ -f "$RUNPATH"alignments.sorted ]] ; then
-		echo "$FASTQ" reads mapped to reference.
-		echo
-		else
-		die "Exit, $RUNPATH alignments.sorted not made, check minimap log files"
-	fi
+	mapping_fn
 fi
+
 
 # if you want to make a smaller bam to perform DNAscent on either specific regions or a subsample of full bam,
 # provide arguments -L (bed file with list of regions to keep) or -s (INT.FRAC for samtools view -s subsample flag), don't use together, also provide -n <name>
