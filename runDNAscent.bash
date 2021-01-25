@@ -272,6 +272,31 @@ function sub_bam_fn() {
     samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
 }
 
+# DESC: Function to run DNAscent 2.0 detect (and index if necessary)
+# ARGS: None
+# OUTS: StdErr saved to detect_output.txt. If you chose to make a smaller region bam
+# OUTS: then DNAscent uses this bam.
+# NOTE: This still needs to be generalised and adapted for SLURM use
+function dnascent_fn() {
+	if [[ ! -f "$RUNPATH"index.dnascent ]]; then
+		echo "DNAscent index"
+		echo
+		DNAscent index -f "$FAST5" -s "$RUNPATH"sequencing_summary.txt -o "$RUNPATH"index.dnascent 2> "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt
+	fi
+
+	echo
+	echo "DNAscent detect"
+	echo
+	DNAscent detect -b "$BAM" -r "$REFGENOME" -i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$NAME".detect -t 50 --GPU 0 -l "$DETECTTHRESHOLD" 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt
+
+	if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".detect ]] ; then
+		echo "$RUNPATH""$SAVEDIR" detect complete.
+		echo
+		else
+		die "Exit, detect file not made, check detect log files"
+	fi
+}
+
 # DESC: Generic script initialisation
 # ARGS: $@ (optional): Arguments provided to the script
 # OUTS: $orig_cwd: The current working directory when the script was run
@@ -398,8 +423,11 @@ if [[ "$BASECALL" == true || "$MAPPING" == true ]]; then
 	mapping_fn
 fi
 
-# if you want to make a smaller bam to perform DNAscent on either specific regions or a subsample of full bam,
-# provide arguments -L (bed file with list of regions to keep) or -s (INT.FRAC for samtools view -s subsample flag), don't use together, also provide -n <name>
+# if you want to make a smaller bam to perform DNAscent on either specific regions or a
+# subsample of full bam, provide arguments:
+# -L (bed file with list of regions to keep) or
+# -s (INT.FRAC for samtools view -s subsample flag),
+# don't use together, also provide -n <name>
 if [[ "$REGION" != "FALSE" ]]; then
 	regional_bam_fn
 	elif [[ "$SUBSAMPLE" != "FALSE" ]]; then
@@ -407,23 +435,7 @@ if [[ "$REGION" != "FALSE" ]]; then
 fi
 
 #run DNAscent 2.0 index (if necessary) and detect. StdErr saved to detect_output.txt. If you chose to make a smaller region bam then DNAscent uses this bam.
-if [[ ! -f "$RUNPATH"index.dnascent ]]; then
-	echo "DNAscent index"
-	echo
-	DNAscent index -f "$FAST5" -s "$RUNPATH"sequencing_summary.txt -o "$RUNPATH"index.dnascent 2> "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt
-fi
-
-echo
-echo "DNAscent detect"
-echo
-DNAscent detect -b "$BAM" -r "$REFGENOME" -i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$NAME".detect -t 50 --GPU 0 -l "$DETECTTHRESHOLD" 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt
-
-if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".detect ]] ; then
-	echo "$RUNPATH""$SAVEDIR" detect complete.
-	echo
-	else
-	die "Exit, detect file not made, check detect log files"
-fi
+dnascent_fn
 
 # Make bedgraphs with optional (-f) run DNAscent 2.0 forksense , StdErr saved to forkSense_output.txt
 if [[ "$FORKSENSE" == true ]]; then
