@@ -427,6 +427,10 @@ function EI_HPC_init() {
 	source /ei/software/staging/CISSUPPORT-12154/stagingloader	# DNAscent - 2.0.2
 	readonly python_utils_dir="/ei/projects/a/ac9cb897-b4c0-44d0-a54b-2ddf13310bc4/data/scripts"	# path to DNAscent v2 utilities
 	readonly guppy_model_dir=""									# path to guppy model files - empty, since not required
+	# Create a (hopefully) unique prefix for the names of all jobs in this 
+	# particular run of the pipeline. This makes sure that runs can be
+	# identified unambiguously
+	run=$(uuidgen | tr '-' ' ' | awk '{print $1}')
 }
 
 ########################################################################
