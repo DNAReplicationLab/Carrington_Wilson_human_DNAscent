@@ -234,6 +234,95 @@ function basecall_fn() {
 	fi
 }
 
+# DESC: mapping fastq data with minimap2 to generate sorted bam file (with samtools)
+# ARGS: None
+# OUTS: None
+# NOTE: This still needs to be generalised and adapted for SLURM use
+function mapping_fn() {
+	#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
+	minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt \
+		| samtools view -Sb - \
+		| samtools sort - -o "$RUNPATH"alignments.sorted
+
+	samtools index "$RUNPATH"alignments.sorted
+
+	if [[ -f "$RUNPATH"alignments.sorted ]] ; then
+		echo "$FASTQ" reads mapped to reference.
+		echo
+		else
+		die "Exit, $RUNPATH alignments.sorted not made, check minimap log files"
+	fi
+}
+
+# DESC: select specific regions from the bam bile with provided bed file (-L flag)
+# ARGS: None
+# OUTS: None
+# NOTE: This still needs to be generalised and adapted for SLURM use
+function regional_bam_fn() {
+	samtools view -h -b -M -L "$REGION" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
+	samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
+}
+
+# DESC: subsample bam file to fraction of original size (-s flag)
+# ARGS: None
+# OUTS: None
+# NOTE: This still needs to be generalised and adapted for SLURM use
+function sub_bam_fn() {
+	samtools view -h -b -s "$SUBSAMPLE" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
+    samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
+}
+
+# DESC: Function to run DNAscent 2.0 detect (and index if necessary)
+# ARGS: None
+# OUTS: StdErr saved to detect_output.txt.
+# NOTE: If you chose to make a smaller region bam then DNAscent uses this bam.
+# NOTE: This still needs to be generalised and adapted for SLURM use
+function dnascent_fn() {
+	if [[ ! -f "$RUNPATH"index.dnascent ]]; then
+		echo "DNAscent index"
+		echo
+		DNAscent index -f "$FAST5" -s "$RUNPATH"sequencing_summary.txt -o "$RUNPATH"index.dnascent 2> "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt
+	fi
+
+	echo
+	echo "DNAscent detect"
+	echo
+	DNAscent detect -b "$BAM" -r "$REFGENOME" -i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$NAME".detect -t 50 --GPU 0 -l "$DETECTTHRESHOLD" 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt
+
+	if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".detect ]] ; then
+		echo "$RUNPATH""$SAVEDIR" detect complete.
+		echo
+		else
+		die "Exit, detect file not made, check detect log files"
+	fi
+	echo "make bedgraphs"
+	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs 2> "$RUNPATH""$SAVEDIR"/logfiles/dnascent_bedgraph_output.txt
+}
+
+# DESC: Function to run DNAscent 2.0 forkSense
+# ARGS: None
+# OUTS: StdErr saved to forkSense_output.txt
+# NOTE: This still needs to be generalised and adapted for SLURM use
+function forksense_fn() {
+	touch "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
+	echo "DNAscent forkSense"
+	echo
+	DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".forkSense --markOrigins --markTerminations 2> "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
+	# to fix forksense save location bug
+	mv "$RUNPATH"origins_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
+	mv "$RUNPATH"terminations_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
+
+	if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense ]]; then
+		echo "$RUNPATH""$SAVEDIR" forksense complete.
+		echo
+	else
+	die "Exit, forksense file not found, check forksense log file"
+	fi
+	echo "make bedgraphs"
+	python "$python_utils_dir"/dnascent2bedgraph.py -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense -o "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs 2> "$RUNPATH"/"$SAVEDIR"/logfiles/forkSense_bedgraph_output.txt
+
+}
+
 # DESC: Generic script initialisation
 # ARGS: $@ (optional): Arguments provided to the script
 # OUTS: $orig_cwd: The current working directory when the script was run
@@ -357,77 +446,31 @@ if [[ "$BASECALL" == true ]]; then
 fi
 
 if [[ "$BASECALL" == true || "$MAPPING" == true ]]; then
-	#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
-	minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt \
-		| samtools view -Sb - \
-		| samtools sort - -o "$RUNPATH"alignments.sorted
-
-	samtools index "$RUNPATH"alignments.sorted
-
-	if [[ -f "$RUNPATH"alignments.sorted ]] ; then
-		echo "$FASTQ" reads mapped to reference.
-		echo
-		else
-		die "Exit, $RUNPATH alignments.sorted not made, check minimap log files"
-	fi
+	mapping_fn
 fi
 
-# if you want to make a smaller bam to perform DNAscent on either specific regions or a subsample of full bam,
-# provide arguments -L (bed file with list of regions to keep) or -s (INT.FRAC for samtools view -s subsample flag), don't use together, also provide -n <name>
-
+# if you want to make a smaller bam to perform DNAscent on either specific regions or a
+# subsample of full bam, provide arguments:
+# -L (bed file with list of regions to keep) or
+# -s (INT.FRAC for samtools view -s subsample flag),
+# don't use together, also provide -n <name>
 if [[ "$REGION" != "FALSE" ]]; then
-	samtools view -h -b -M -L "$REGION" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
-	samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
+	regional_bam_fn
 	elif [[ "$SUBSAMPLE" != "FALSE" ]]; then
-	samtools view -h -b -s "$SUBSAMPLE" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
-        samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
+	sub_bam_fn
 fi
 
-#run DNAscent 2.0 index (if necessary) and detect. StdErr saved to detect_output.txt. If you chose to make a smaller region bam then DNAscent uses this bam.
-if [[ ! -f "$RUNPATH"index.dnascent ]]; then
-	echo "DNAscent index"
-	echo
-	DNAscent index -f "$FAST5" -s "$RUNPATH"sequencing_summary.txt -o "$RUNPATH"index.dnascent 2> "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt
-fi
+# run DNAscent 2.0 index (if necessary) and detect.
+# StdErr saved to detect_output.txt.
+# If you chose to make a smaller region bam then DNAscent uses this bam.
+# Also generates bedgraphs from the detect files
+dnascent_fn
 
-echo
-echo "DNAscent detect"
-echo
-DNAscent detect -b "$BAM" -r "$REFGENOME" -i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$NAME".detect -t 50 --GPU 0 -l "$DETECTTHRESHOLD" 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt
-
-if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".detect ]] ; then
-	echo "$RUNPATH""$SAVEDIR" detect complete.
-	echo
-	else
-	die "Exit, detect file not made, check detect log files"
-fi
-
-# Make bedgraphs with optional (-f) run DNAscent 2.0 forksense , StdErr saved to forkSense_output.txt
+# Make bedgraphs with optional (-f) run DNAscent 2.0 forksense,
+# StdErr saved to forkSense_output.txt
+# Also generate bedgraphs from the forksense output
 if [[ "$FORKSENSE" == true ]]; then
-	touch "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
-	echo "DNAscent forkSense"
-	echo
-	DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".forkSense --markOrigins --markTerminations 2> "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
-	# to fix forksense save location bug
-	mv "$RUNPATH"origins_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
-	mv "$RUNPATH"terminations_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
-
-	if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense ]]; then
-		echo "$RUNPATH""$SAVEDIR" forksense complete.
-		echo
-	else
-	die "Exit, forksense file not found, check forksense log file"
-	fi
-fi
-
-#Convert detect and forkSense files to bedgraphs, StdErr saved to bedgraph_output.txt
-if [[ "$FORKSENSE" == true ]]; then
-	echo "make bedgraphs"
-	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense -o "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs 2> "$RUNPATH"/"$SAVEDIR"/logfiles/bedgraph_output.txt
-	else
-	#Just convert detect file to bedgraphs
-	echo "make bedgraphs"
-	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs 2> "$RUNPATH""$SAVEDIR"/logfiles/bedgraph_output.txt
+	forksense_fn
 fi
 
 if [[ -d "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs ]]; then
