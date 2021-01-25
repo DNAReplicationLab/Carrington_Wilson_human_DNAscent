@@ -274,8 +274,8 @@ function sub_bam_fn() {
 
 # DESC: Function to run DNAscent 2.0 detect (and index if necessary)
 # ARGS: None
-# OUTS: StdErr saved to detect_output.txt. If you chose to make a smaller region bam
-# OUTS: then DNAscent uses this bam.
+# OUTS: StdErr saved to detect_output.txt.
+# NOTE: If you chose to make a smaller region bam then DNAscent uses this bam.
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function dnascent_fn() {
 	if [[ ! -f "$RUNPATH"index.dnascent ]]; then
@@ -294,6 +294,27 @@ function dnascent_fn() {
 		echo
 		else
 		die "Exit, detect file not made, check detect log files"
+	fi
+}
+
+# DESC: Function to run DNAscent 2.0 forkSense
+# ARGS: None
+# OUTS: StdErr saved to forkSense_output.txt
+# NOTE: This still needs to be generalised and adapted for SLURM use
+function forksense_fn() {
+	touch "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
+	echo "DNAscent forkSense"
+	echo
+	DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".forkSense --markOrigins --markTerminations 2> "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
+	# to fix forksense save location bug
+	mv "$RUNPATH"origins_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
+	mv "$RUNPATH"terminations_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
+
+	if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense ]]; then
+		echo "$RUNPATH""$SAVEDIR" forksense complete.
+		echo
+	else
+	die "Exit, forksense file not found, check forksense log file"
 	fi
 }
 
@@ -439,20 +460,7 @@ dnascent_fn
 
 # Make bedgraphs with optional (-f) run DNAscent 2.0 forksense , StdErr saved to forkSense_output.txt
 if [[ "$FORKSENSE" == true ]]; then
-	touch "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
-	echo "DNAscent forkSense"
-	echo
-	DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".forkSense --markOrigins --markTerminations 2> "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
-	# to fix forksense save location bug
-	mv "$RUNPATH"origins_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
-	mv "$RUNPATH"terminations_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
-
-	if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense ]]; then
-		echo "$RUNPATH""$SAVEDIR" forksense complete.
-		echo
-	else
-	die "Exit, forksense file not found, check forksense log file"
-	fi
+	forksense_fn
 fi
 
 #Convert detect and forkSense files to bedgraphs, StdErr saved to bedgraph_output.txt
