@@ -254,6 +254,24 @@ function mapping_fn() {
 	fi
 }
 
+# DESC: select specific regions from the bam bile with provided bed file (-L flag)
+# ARGS: None
+# OUTS: None
+# NOTE: This still needs to be generalised and adapted for SLURM use
+function regional_bam_fn() {
+	samtools view -h -b -M -L "$REGION" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
+	samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
+}
+
+# DESC: subsample bam file to fraction of original size (-s flag)
+# ARGS: None
+# OUTS: None
+# NOTE: This still needs to be generalised and adapted for SLURM use
+function sub_bam_fn() {
+	samtools view -h -b -s "$SUBSAMPLE" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
+    samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
+}
+
 # DESC: Generic script initialisation
 # ARGS: $@ (optional): Arguments provided to the script
 # OUTS: $orig_cwd: The current working directory when the script was run
@@ -380,16 +398,12 @@ if [[ "$BASECALL" == true || "$MAPPING" == true ]]; then
 	mapping_fn
 fi
 
-
 # if you want to make a smaller bam to perform DNAscent on either specific regions or a subsample of full bam,
 # provide arguments -L (bed file with list of regions to keep) or -s (INT.FRAC for samtools view -s subsample flag), don't use together, also provide -n <name>
-
 if [[ "$REGION" != "FALSE" ]]; then
-	samtools view -h -b -M -L "$REGION" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
-	samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
+	regional_bam_fn
 	elif [[ "$SUBSAMPLE" != "FALSE" ]]; then
-	samtools view -h -b -s "$SUBSAMPLE" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
-        samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
+	sub_bam_fn
 fi
 
 #run DNAscent 2.0 index (if necessary) and detect. StdErr saved to detect_output.txt. If you chose to make a smaller region bam then DNAscent uses this bam.
