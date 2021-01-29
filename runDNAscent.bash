@@ -326,8 +326,8 @@ function dnascent_fn() {
 		else
 		die "Exit, detect file not made, check detect log files"
 	fi
-	info "make bedgraphs"
-	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs 2> "$RUNPATH""$SAVEDIR"/logfiles/dnascent_bedgraph_output.txt
+	info "make detect bedgraphs"
+	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".detect.bedgraphs 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_bedgraph_output.txt
 }
 
 # DESC: Function to run DNAscent 2.0 forkSense
@@ -349,9 +349,8 @@ function forksense_fn() {
 	else
 	die "Exit, forksense file not found, check forksense log file"
 	fi
-	info "make bedgraphs"
-	python "$python_utils_dir"/dnascent2bedgraph.py -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense -o "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs 2> "$RUNPATH"/"$SAVEDIR"/logfiles/forkSense_bedgraph_output.txt
-
+	info "make forksense bedgraphs"
+	python "$python_utils_dir"/dnascent2bedgraph.py -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense -o "$RUNPATH""$SAVEDIR"/"$NAME".forksense.bedgraphs 2> "$RUNPATH"/"$SAVEDIR"/logfiles/forkSense_bedgraph_output.txt
 }
 
 # DESC: Generic script initialisation
@@ -480,17 +479,24 @@ fi
 # Also generates bedgraphs from the detect files
 dnascent_fn
 
-# Make bedgraphs with optional (-f) run DNAscent 2.0 forksense,
+if [[ -d "$RUNPATH""$SAVEDIR"/"$NAME".detect.bedgraphs ]]; then
+        echo
+        echo "$RUNPATH""$SAVEDIR" detect bedgraphs saved.
+        else
+        die "Exit, $NAME.detect.bedgraphs folder not found. Check bedgraphs logfile"
+fi
+
+# (optional) run (-f) DNAscent 2.0 forksense,
 # StdErr saved to forkSense_output.txt
 # Also generate bedgraphs from the forksense output
 if [[ "$FORKSENSE" == true ]]; then
 	forksense_fn
-fi
 
-if [[ -d "$RUNPATH""$SAVEDIR"/"$NAME".bedgraphs ]]; then
-	info
-	info "$RUNPATH""$SAVEDIR" bedgraphs saved.
-	else
-	die "Exit, $NAME.bedgrpahs folder not found. Check bedgraphs logfile"
+	if [[ -d "$RUNPATH""$SAVEDIR"/"$NAME".forksense.bedgraphs ]]; then
+		info
+		info "$RUNPATH""$SAVEDIR" forksense bedgraphs saved.
+		else
+		die "Exit, $NAME.forksense.bedgraphs folder not found. Check bedgraphs logfile"
+	fi
 fi
 
