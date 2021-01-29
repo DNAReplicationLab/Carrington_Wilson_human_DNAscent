@@ -68,6 +68,37 @@ Optional parameters/flags:
 EOF
 }
 
+# DESC: Script initialisation for use on Nieduszynski server at UoO
+# ARGS: None
+# OUTS: Exports locations for cuda libraries
+# NOTE: This is where to add anything specific to running on Nieduszynski server.
+function UoO_init() {
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
+	export PATH=/data/software_local/guppy_legacy/v3.6/bin:$PATH		# path to guppy
+	export PATH=/data/software_local/minimap2-2.10:$PATH		# path to minimap2
+	export PATH=/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin:$PATH				# path to DNAscent v2
+	readonly python_utils_dir="/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils"	# path to DNAscent v2 utilities
+	readonly guppy_model_dir="/data/software_local/guppy_legacy/v3.6/data/"										# path to guppy model files
+}
+
+# DESC: Script initialisation for use on EI HPC at NRP
+# ARGS: None
+# OUTS: Nothing yet
+# NOTE: This is where to add anything specific to running on the EI HPC.
+function EI_HPC_init() {
+	source package 0e96b5e6-3f41-4d6f-91cc-1b6d7ad05ef5			# guppy - 4.0.14
+	source package /tgac/software/testing/bin/minimap2-2.17		# minimap2 - 2.17
+	source package 758be80b-33cc-495a-9adc-11882ab145b1			# samtools - 1.10
+	source /ei/software/staging/CISSUPPORT-12154/stagingloader	# DNAscent - 2.0.2
+	readonly python_utils_dir="/ei/projects/a/ac9cb897-b4c0-44d0-a54b-2ddf13310bc4/data/scripts"	# path to DNAscent v2 utilities
+	readonly guppy_model_dir=""									# path to guppy model files - empty, since not required
+	# Create a (hopefully) unique prefix for the names of all jobs in this 
+	# particular run of the pipeline. This makes sure that runs can be
+	# identified unambiguously
+	run=$(uuidgen | tr '-' ' ' | awk '{print $1}')
+}
+
 # DESC: Exit script with the given message
 # ARGS: $1 (required): Message to print on exit
 #       $2 (optional): Exit code (defaults to 1)
@@ -402,36 +433,6 @@ function print_variables() {
 	info
 }
 
-# DESC: Script initialisation for use on Nieduszynski server at UoO
-# ARGS: None
-# OUTS: Exports locations for cuda libraries
-# NOTE: This is where to add anything specific to running on Nieduszynski server.
-function UoO_init() {
-	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
-	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
-	export PATH=/data/software_local/guppy_legacy/v3.6/bin:$PATH		# path to guppy
-	export PATH=/data/software_local/minimap2-2.10:$PATH		# path to minimap2
-	export PATH=/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin:$PATH				# path to DNAscent v2
-	readonly python_utils_dir="/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils"	# path to DNAscent v2 utilities
-	readonly guppy_model_dir="/data/software_local/guppy_legacy/v3.6/data/"										# path to guppy model files
-}
-
-# DESC: Script initialisation for use on EI HPC at NRP
-# ARGS: None
-# OUTS: Nothing yet
-# NOTE: This is where to add anything specific to running on the EI HPC.
-function EI_HPC_init() {
-	source package 0e96b5e6-3f41-4d6f-91cc-1b6d7ad05ef5			# guppy - 4.0.14
-	source package /tgac/software/testing/bin/minimap2-2.17		# minimap2 - 2.17
-	source package 758be80b-33cc-495a-9adc-11882ab145b1			# samtools - 1.10
-	source /ei/software/staging/CISSUPPORT-12154/stagingloader	# DNAscent - 2.0.2
-	readonly python_utils_dir="/ei/projects/a/ac9cb897-b4c0-44d0-a54b-2ddf13310bc4/data/scripts"	# path to DNAscent v2 utilities
-	readonly guppy_model_dir=""									# path to guppy model files - empty, since not required
-	# Create a (hopefully) unique prefix for the names of all jobs in this 
-	# particular run of the pipeline. This makes sure that runs can be
-	# identified unambiguously
-	run=$(uuidgen | tr '-' ' ' | awk '{print $1}')
-}
 
 ########################################################################
 # Main programme starts here
