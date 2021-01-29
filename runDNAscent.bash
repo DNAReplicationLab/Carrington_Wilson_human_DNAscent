@@ -68,6 +68,37 @@ Optional parameters/flags:
 EOF
 }
 
+# DESC: Script initialisation for use on Nieduszynski server at UoO
+# ARGS: None
+# OUTS: Exports locations for cuda libraries
+# NOTE: This is where to add anything specific to running on Nieduszynski server.
+function UoO_init() {
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
+	export PATH=/data/software_local/guppy_legacy/v3.6/bin:$PATH		# path to guppy
+	export PATH=/data/software_local/minimap2-2.10:$PATH		# path to minimap2
+	export PATH=/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin:$PATH				# path to DNAscent v2
+	readonly python_utils_dir="/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils"	# path to DNAscent v2 utilities
+	readonly guppy_model_dir="/data/software_local/guppy_legacy/v3.6/data/"										# path to guppy model files
+}
+
+# DESC: Script initialisation for use on EI HPC at NRP
+# ARGS: None
+# OUTS: Nothing yet
+# NOTE: This is where to add anything specific to running on the EI HPC.
+function EI_HPC_init() {
+	source package 0e96b5e6-3f41-4d6f-91cc-1b6d7ad05ef5			# guppy - 4.0.14
+	source package /tgac/software/testing/bin/minimap2-2.17		# minimap2 - 2.17
+	source package 758be80b-33cc-495a-9adc-11882ab145b1			# samtools - 1.10
+	source /ei/software/staging/CISSUPPORT-12154/stagingloader	# DNAscent - 2.0.2
+	readonly python_utils_dir="/ei/projects/a/ac9cb897-b4c0-44d0-a54b-2ddf13310bc4/data/scripts"	# path to DNAscent v2 utilities
+	readonly guppy_model_dir=""									# path to guppy model files - empty, since not required
+	# Create a (hopefully) unique prefix for the names of all jobs in this 
+	# particular run of the pipeline. This makes sure that runs can be
+	# identified unambiguously
+	run=$(uuidgen | tr '-' ' ' | awk '{print $1}')
+}
+
 # DESC: Exit script with the given message
 # ARGS: $1 (required): Message to print on exit
 #       $2 (optional): Exit code (defaults to 1)
@@ -227,8 +258,8 @@ function basecall_fn() {
 
 	# check worked
 	if [[ -f "$RUNPATH"reads.fastq ]]; then
-		echo "$RUNPATH fastq files generated and tidied"
-		echo
+		info "$RUNPATH fastq files generated and tidied"
+		info
 		else
 		die "Exit, $RUNPATH reads.fastq not made, check guppy log files"
 	fi
@@ -247,8 +278,8 @@ function mapping_fn() {
 	samtools index "$RUNPATH"alignments.sorted
 
 	if [[ -f "$RUNPATH"alignments.sorted ]] ; then
-		echo "$FASTQ" reads mapped to reference.
-		echo
+		info "$FASTQ" reads mapped to reference.
+		info
 		else
 		die "Exit, $RUNPATH alignments.sorted not made, check minimap log files"
 	fi
@@ -279,23 +310,23 @@ function sub_bam_fn() {
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function dnascent_fn() {
 	if [[ ! -f "$RUNPATH"index.dnascent ]]; then
-		echo "DNAscent index"
-		echo
+		info "DNAscent index"
+		info
 		DNAscent index -f "$FAST5" -s "$RUNPATH"sequencing_summary.txt -o "$RUNPATH"index.dnascent 2> "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt
 	fi
 
-	echo
-	echo "DNAscent detect"
-	echo
+	info
+	info "DNAscent detect"
+	info
 	DNAscent detect -b "$BAM" -r "$REFGENOME" -i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$NAME".detect -t 50 --GPU 0 -l "$DETECTTHRESHOLD" 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt
 
 	if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".detect ]] ; then
-		echo "$RUNPATH""$SAVEDIR" detect complete.
-		echo
+		info "$RUNPATH""$SAVEDIR" detect complete.
+		info
 		else
 		die "Exit, detect file not made, check detect log files"
 	fi
-	echo "make detect bedgraphs"
+	info "make detect bedgraphs"
 	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".detect.bedgraphs 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_bedgraph_output.txt
 }
 
@@ -305,22 +336,21 @@ function dnascent_fn() {
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function forksense_fn() {
 	touch "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
-	echo "DNAscent forkSense"
-	echo
+	info "DNAscent forkSense"
+	info
 	DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".forkSense --markOrigins --markTerminations 2> "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
 	# to fix forksense save location bug
 	mv "$RUNPATH"origins_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
 	mv "$RUNPATH"terminations_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
 
 	if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense ]]; then
-		echo "$RUNPATH""$SAVEDIR" forksense complete.
-		echo
+		info "$RUNPATH""$SAVEDIR" forksense complete.
+		info
 	else
 	die "Exit, forksense file not found, check forksense log file"
 	fi
-	echo "make forksense bedgraphs"
+	info "make forksense bedgraphs"
 	python "$python_utils_dir"/dnascent2bedgraph.py -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense -o "$RUNPATH""$SAVEDIR"/"$NAME".forksense.bedgraphs 2> "$RUNPATH"/"$SAVEDIR"/logfiles/forkSense_bedgraph_output.txt
-
 }
 
 # DESC: Generic script initialisation
@@ -369,56 +399,39 @@ function script_init() {
     readonly guppy_model="dna_r9.4.1_450bps_fast.cfg"			# guppy model to use for basecalling
 }
 
+# DESC: Script to output information to screen (if verbose) or summary file
+# ARGS: Informative text to output
+# OUTS: 
+# NOTE:
+function info() {
+	if [[ "$verbose" == true ]]; then
+	    echo "INFO: $@" 
+	else
+		echo "INFO: $@" > "$RUNPATH""$SAVEDIR"/logfiles/summary.txt 
+}
+
 # DESC: Prints variables those variables that have been set, if verbose true
 # ARGS: None
 # OUTS: None
 # NOTE:
 function print_variables() {
-	if [[ "$verbose" == true ]]; then
-		echo Run script at $RUNSCRIPT
-		echo BASECALL and mapping = $BASECALL
-		echo MAPPING only = $MAPPING
-		echo FORKSENSE = $FORKSENSE
-		echo FAST5 = $FAST5
-		echo RUNPATH = $RUNPATH
-		echo SAVEDIR = $SAVEDIR
-		echo REFGENOME = $REFGENOME
-		echo DETECTTHRESHOLD = $DETECTTHRESHOLD
-		echo NAME = $NAME
-		echo REGION = $REGION
-		echo SUBSAMPLE = $SUBSAMPLE
-		echo "BAM to use for detect" = $BAM
- 		echo "Fastq file to use" = $FASTQ
-		echo
-	fi
+	info Run script at $RUNSCRIPT
+	info BASECALL and mapping = $BASECALL
+	info MAPPING only = $MAPPING
+	info FORKSENSE = $FORKSENSE
+	info FAST5 = $FAST5
+	info RUNPATH = $RUNPATH
+	info SAVEDIR = $SAVEDIR
+	info REFGENOME = $REFGENOME
+	info DETECTTHRESHOLD = $DETECTTHRESHOLD
+	info NAME = $NAME
+	info REGION = $REGION
+	info SUBSAMPLE = $SUBSAMPLE
+	info "BAM to use for detect" = $BAM
+	info "Fastq file to use" = $FASTQ
+	info
 }
 
-# DESC: Script initialisation for use on Nieduszynski server at UoO
-# ARGS: None
-# OUTS: Exports locations for cuda libraries
-# NOTE: This is where to add anything specific to running on Nieduszynski server.
-function UoO_init() {
-	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
-	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
-	export PATH=/data/software_local/guppy_legacy/v3.6/bin:$PATH		# path to guppy
-	export PATH=/data/software_local/minimap2-2.10:$PATH		# path to minimap2
-	export PATH=/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin:$PATH				# path to DNAscent v2
-	readonly python_utils_dir="/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils"	# path to DNAscent v2 utilities
-	readonly guppy_model_dir="/data/software_local/guppy_legacy/v3.6/data/"										# path to guppy model files
-}
-
-# DESC: Script initialisation for use on EI HPC at NRP
-# ARGS: None
-# OUTS: Nothing yet
-# NOTE: This is where to add anything specific to running on the EI HPC.
-function EI_HPC_init() {
-	source package 0e96b5e6-3f41-4d6f-91cc-1b6d7ad05ef5			# guppy - 4.0.14
-	source package /tgac/software/testing/bin/minimap2-2.17		# minimap2 - 2.17
-	source package 758be80b-33cc-495a-9adc-11882ab145b1			# samtools - 1.10
-	source /ei/software/staging/CISSUPPORT-12154/stagingloader	# DNAscent - 2.0.2
-	readonly python_utils_dir="/ei/projects/a/ac9cb897-b4c0-44d0-a54b-2ddf13310bc4/data/scripts"	# path to DNAscent v2 utilities
-	readonly guppy_model_dir=""									# path to guppy model files - empty, since not required
-}
 
 ########################################################################
 # Main programme starts here
@@ -480,8 +493,8 @@ if [[ "$FORKSENSE" == true ]]; then
 	forksense_fn
 
 	if [[ -d "$RUNPATH""$SAVEDIR"/"$NAME".forksense.bedgraphs ]]; then
-		echo
-		echo "$RUNPATH""$SAVEDIR" forksense bedgraphs saved.
+		info
+		info "$RUNPATH""$SAVEDIR" forksense bedgraphs saved.
 		else
 		die "Exit, $NAME.forksense.bedgraphs folder not found. Check bedgraphs logfile"
 	fi
