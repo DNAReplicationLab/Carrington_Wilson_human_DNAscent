@@ -333,8 +333,17 @@ function regional_bam_fn() {
 # OUTS: None
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function sub_bam_fn() {
-	samtools view -h -b -s "$SUBSAMPLE" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
-    samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
+	local command1=(samtools view -h -b -s "$SUBSAMPLE" \
+		-o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted)
+    local command2=(samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam)
+	if [[ "$RUNSCRIPT" == "EI" ]]; then
+
+		# TODO: SLURM job submissions to go here
+
+		else
+		"${command1[@]}"
+		"${command2[@]}"
+	fi	
 }
 
 # DESC: Function to run DNAscent 2.0 detect (and index if necessary)
