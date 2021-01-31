@@ -244,24 +244,40 @@ function basecall_fn() {
 	# check not overwriting
 #	[[ -f "$RUNPATH"reads.fastq ]] && die "Exit as reads.fastq already exists in -a directory"
 
-	mkdir "$RUNPATH""$SAVEDIR"/logfiles/guppy_logfiles
-	touch "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt
+	local command1=(mkdir "$RUNPATH""$SAVEDIR"/logfiles/guppy_logfiles)
+	local command2=(touch "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt \
+						"$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt)
 
 	#use guppy to basecall fast5 files to generate fastq files, StdOut saved to guppy_ouput.txt
-	guppy_basecaller -i "$FAST5" -s "$RUNPATH" -c "$guppy_model_dir""$guppy_model" -r -x 'cuda:0' > "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt
+	local command3=(guppy_basecaller -i "$FAST5" -s "$RUNPATH" \
+					-c "$guppy_model_dir""$guppy_model" -r \
+					-x 'cuda:0' > "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt)
 
 	#tidy output
-	mkdir "$RUNPATH"fastq_files
-	mv "$RUNPATH"*.log "$RUNPATH""$SAVEDIR"/logfiles/guppy_logfiles
-	mv "$RUNPATH"*.fastq "$RUNPATH"fastq_files
-	cat "$RUNPATH"fastq_files/*.fastq > "$RUNPATH"reads.fastq
+	local command4=(mkdir "$RUNPATH"fastq_files)
+	local command5=(mv "$RUNPATH"*.log "$RUNPATH""$SAVEDIR"/logfiles/guppy_logfiles)
+	local command6=(mv "$RUNPATH"*.fastq "$RUNPATH"fastq_files)
+	local command7=(cat "$RUNPATH"fastq_files/*.fastq > "$RUNPATH"reads.fastq)
 
-	# check worked
-	if [[ -f "$RUNPATH"reads.fastq ]]; then
-		info "$RUNPATH fastq files generated and tidied"
-		info
+	if [[ "$RUNSCRIPT" == "EI" ]]; then
+
+		# TODO: SLURM job submissions to go here
+
 		else
-		die "Exit, $RUNPATH reads.fastq not made, check guppy log files"
+		"${command1[@]}"
+		"${command2[@]}"
+		"${command3[@]}"
+		"${command4[@]}"
+		"${command5[@]}"
+		"${command6[@]}"
+		"${command7[@]}"		
+		# check worked
+		if [[ -f "$RUNPATH"reads.fastq ]]; then
+			info "$RUNPATH fastq files generated and tidied"
+			info
+			else
+			die "Exit, $RUNPATH reads.fastq not made, check guppy log files"
+		fi
 	fi
 }
 
