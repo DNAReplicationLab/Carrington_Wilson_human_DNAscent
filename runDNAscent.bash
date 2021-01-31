@@ -298,7 +298,7 @@ function mapping_fn() {
 
 		# TODO: SLURM job submissions to go here
 
-		else
+	else
 		"${command1[@]}"
 		"${command2[@]}"
 		if [[ -f "$RUNPATH"alignments.sorted ]] ; then
@@ -322,7 +322,7 @@ function regional_bam_fn() {
 
 		# TODO: SLURM job submissions to go here
 
-		else
+	else
 		"${command1[@]}"
 		"${command2[@]}"
 	fi	
@@ -340,7 +340,7 @@ function sub_bam_fn() {
 
 		# TODO: SLURM job submissions to go here
 
-		else
+	else
 		"${command1[@]}"
 		"${command2[@]}"
 	fi	
@@ -355,22 +355,48 @@ function dnascent_fn() {
 	if [[ ! -f "$RUNPATH"index.dnascent ]]; then
 		info "DNAscent index"
 		info
-		DNAscent index -f "$FAST5" -s "$RUNPATH"sequencing_summary.txt -o "$RUNPATH"index.dnascent 2> "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt
+		local command1=(DNAscent index -f "$FAST5" \
+			-s "$RUNPATH"sequencing_summary.txt \
+			-o "$RUNPATH"index.dnascent \
+			2> "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt)
+		if [[ "$RUNSCRIPT" == "EI" ]]; then
+
+		# TODO: SLURM job submissions to go here
+
+		else
+			"${command1[@]}"
+		fi	
 	fi
 
 	info
 	info "DNAscent detect"
 	info
-	DNAscent detect -b "$BAM" -r "$REFGENOME" -i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$NAME".detect -t 50 --GPU 0 -l "$DETECTTHRESHOLD" 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt
+	local command2=(DNAscent detect -b "$BAM" -r "$REFGENOME" \
+		-i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$NAME".detect \
+		-t 50 --GPU 0 -l "$DETECTTHRESHOLD" \
+		2> "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt)
 
-	if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".detect ]] ; then
-		info "$RUNPATH""$SAVEDIR" detect complete.
-		info
-		else
-		die "Exit, detect file not made, check detect log files"
-	fi
-	info "make detect bedgraphs"
-	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".detect.bedgraphs 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_bedgraph_output.txt
+	local command3=(python "$python_utils_dir"/dnascent2bedgraph.py \
+		-d "$RUNPATH""$SAVEDIR"/"$NAME".detect \
+		-o "$RUNPATH""$SAVEDIR"/"$NAME".detect.bedgraphs \
+		2> "$RUNPATH""$SAVEDIR"/logfiles/detect_bedgraph_output.txt)
+
+	if [[ "$RUNSCRIPT" == "EI" ]]; then
+
+		# TODO: SLURM job submissions to go here
+
+	else
+		"${command2[@]}"
+
+		if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".detect ]] ; then
+			info "$RUNPATH""$SAVEDIR" detect complete.
+			info
+			else
+			die "Exit, detect file not made, check detect log files"
+		fi
+		info "make detect bedgraphs"
+		"${command3[@]}"
+	fi	
 }
 
 # DESC: Function to run DNAscent 2.0 forkSense
