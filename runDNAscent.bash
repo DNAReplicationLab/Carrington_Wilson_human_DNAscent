@@ -315,8 +315,17 @@ function mapping_fn() {
 # OUTS: None
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function regional_bam_fn() {
-	samtools view -h -b -M -L "$REGION" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
-	samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
+	local command1=(samtools view -h -b -M -L "$REGION" \
+		-o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted)
+	local command2=(samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam)
+	if [[ "$RUNSCRIPT" == "EI" ]]; then
+
+		# TODO: SLURM job submissions to go here
+
+		else
+		"${command1[@]}"
+		"${command2[@]}"
+	fi	
 }
 
 # DESC: subsample bam file to fraction of original size (-s flag)
