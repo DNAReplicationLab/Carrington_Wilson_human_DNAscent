@@ -287,17 +287,26 @@ function basecall_fn() {
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function mapping_fn() {
 	#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
-	minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt \
+	local command1=(minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" \
+		2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt \
 		| samtools view -Sb - \
-		| samtools sort - -o "$RUNPATH"alignments.sorted
+		| samtools sort - -o "$RUNPATH"alignments.sorted)
 
-	samtools index "$RUNPATH"alignments.sorted
+	local command2=(samtools index "$RUNPATH"alignments.sorted)
 
-	if [[ -f "$RUNPATH"alignments.sorted ]] ; then
-		info "$FASTQ" reads mapped to reference.
-		info
+	if [[ "$RUNSCRIPT" == "EI" ]]; then
+
+		# TODO: SLURM job submissions to go here
+
 		else
-		die "Exit, $RUNPATH alignments.sorted not made, check minimap log files"
+		"${command1[@]}"
+		"${command2[@]}"
+		if [[ -f "$RUNPATH"alignments.sorted ]] ; then
+			info "$FASTQ" reads mapped to reference.
+			info
+			else
+			die "Exit, $RUNPATH alignments.sorted not made, check minimap log files"
+		fi
 	fi
 }
 
