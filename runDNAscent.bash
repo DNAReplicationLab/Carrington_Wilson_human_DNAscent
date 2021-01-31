@@ -404,22 +404,40 @@ function dnascent_fn() {
 # OUTS: StdErr saved to forkSense_output.txt
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function forksense_fn() {
-	touch "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
+	local command1=(touch "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt)
 	info "DNAscent forkSense"
 	info
-	DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".forkSense --markOrigins --markTerminations 2> "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
+	local command2=(DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$NAME".detect \
+		-o "$RUNPATH""$SAVEDIR"/"$NAME".forkSense --markOrigins --markTerminations \
+		2> "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt)
 	# to fix forksense save location bug
-	mv "$RUNPATH"origins_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
-	mv "$RUNPATH"terminations_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
+	local command3=(mv "$RUNPATH"origins_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR")
+	local command4=(mv "$RUNPATH"terminations_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR")
+	local command5=(python "$python_utils_dir"/dnascent2bedgraph.py \
+		-f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense \
+		-o "$RUNPATH""$SAVEDIR"/"$NAME".forksense.bedgraphs \
+		2> "$RUNPATH"/"$SAVEDIR"/logfiles/forkSense_bedgraph_output.txt)
 
-	if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense ]]; then
-		info "$RUNPATH""$SAVEDIR" forksense complete.
-		info
+	if [[ "$RUNSCRIPT" == "EI" ]]; then
+
+		# TODO: SLURM job submissions to go here
+
 	else
-	die "Exit, forksense file not found, check forksense log file"
+		"${command1[@]}"
+		"${command2[@]}"
+		"${command3[@]}"
+		"${command4[@]}"
+
+		if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense ]]; then
+			info "$RUNPATH""$SAVEDIR" forksense complete.
+			info
+		else
+			die "Exit, forksense file not found, check forksense log file"
+		fi
+		info "make forksense bedgraphs"
+		"${command5[@]}"
 	fi
-	info "make forksense bedgraphs"
-	python "$python_utils_dir"/dnascent2bedgraph.py -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense -o "$RUNPATH""$SAVEDIR"/"$NAME".forksense.bedgraphs 2> "$RUNPATH"/"$SAVEDIR"/logfiles/forkSense_bedgraph_output.txt
+
 }
 
 # DESC: Generic script initialisation
