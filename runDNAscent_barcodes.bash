@@ -11,6 +11,7 @@
 #optional:
 # -g to do basecalling and mapping, default is off, if off requires indexed bam file called alignments.sorted, and sequencing_summary.txt to be present in barcode folders. Make sure -a doesn't contain any files/folders that could be overwritten.
 # -m to do just mapping. Default it off. If using this option it requires "BARCODE"reads.fastq file in barcode directories.
+# -c bed file for chromosomes, required with -g and -m flag
 # -b barcode option for guppy basecalling, provide barcode kit name eg "EXP-NBD104"
 # -a barcode folders and sequencing summary saved here
 # -o create and populate folder with any filtered indexed bam files, DNAscent detect and forkSense files so that you can reanalyse reads with different parameters without overwriting eg whole run or just specific chromosomes
@@ -34,6 +35,7 @@ python_utils_dir="/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_de
 BASECALL="FALSE"
 BARCODE="FALSE"
 MAPPING="FALSE"
+CHRBED="FALSE"
 FORKSENSE="FALSE"
 DETECTTHRESHOLD=1000
 NAME="output"
@@ -53,6 +55,8 @@ while [ "$1" != "" ]; do
 		-b )	shift
 			BARCODE="$1" ;;
 		-m )	MAPPING="TRUE" ;;
+		-c )	shift
+			CHRBED="$1" ;;
 		-r )	shift
 			REFGENOME="$1" ;;
 		-k )	FORKSENSE="TRUE" ;;
@@ -73,6 +77,7 @@ done
 echo BASECALL and mapping = $BASECALL
 echo BARCODE = $BARCODE
 echo MAPPING only = $MAPPING
+echo CHRBED = $CHRBED
 echo FORKSENSE = $FORKSENSE
 echo FAST5 = $FAST5
 echo RUNPATH = $RUNPATH
@@ -129,9 +134,19 @@ for BAR in $( cat "$RUNPATH"barcodes.txt ); do
 		FASTQ="$RUNPATH""$BAR"/"$BAR".reads.fastq
 
 		#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
-		minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/"$BAR".minimap_output.txt | samtools view -Sb - | samtools sort - -o "$RUNPATH""$BAR"/"$BAR".alignments.sorted
+		minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/"$BAR".minimap_output.txt \
+		| samtools view -Sb - | samtools sort - -o "$RUNPATH""$BAR"/"$BAR".temp.alignments.sorted
+
+		samtools index "$RUNPATH""$BAR"/"$BAR".temp.alignments.sorted
+
+		# filter out supplementary alignments and alignments mapping to scaffolds
+		samtools view -h -F 2048 -M -L "$CHRBED" "$RUNPATH""$BAR"/"$BAR".temp.alignments.sorted \
+		| samtools sort - -o "$RUNPATH""$BAR"/"$BAR".alignments.sorted
 
 		samtools index "$RUNPATH""$BAR"/"$BAR".alignments.sorted
+
+		rm "$RUNPATH""$BAR"/"$BAR".temp.alignments.sorted "$RUNPATH""$BAR"/"$BAR".temp.alignments.sorted.bai
+
 
 		echo
 		echo "$FASTQ" reads mapped to reference.
