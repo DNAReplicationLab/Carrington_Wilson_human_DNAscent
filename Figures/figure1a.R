@@ -5,251 +5,238 @@
 
 # usage Rscript figure1a.R <working_dir> <save_directory> <comma,separated,list,of,barcodes,to,be,used,together> <as,prev>
 
+#rm(list = ls())
+
 #Load libraries
-library("dplyr", lib.loc="/home/nieduszynski/rosemary/R/x86_64-pc-linux-gnu-library/3.5")
-library("ggplot2", lib.loc="/home/nieduszynski/rosemary/R/x86_64-pc-linux-gnu-library/3.5")
-library("readr", lib.loc="/home/nieduszynski/rosemary/R/x86_64-pc-linux-gnu-library/3.5")
-library("tibble", lib.loc="/home/nieduszynski/rosemary/R/x86_64-pc-linux-gnu-library/3.5")
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(tibble)
 
 args = commandArgs(trailingOnly = TRUE)
-#working_directory <- "/Users/rose/Data/Nanopore/2018_09_10_RW_ONT_RPE_24h_2h"
+#working_directory <- "/Users/rose/Data/Nanopore/2018_09_10_RW_ONT_RPE_24h_2h/"
 
 working_directory <- args[1]
 
 save_directory <- args[2]
-#save_directory <- "/Users/rose/Data/Nanopore/2018_09_10_RW_ONT_RPE_24h_2h"
+#save_directory <- "/Users/rose/Data/Nanopore/2018_09_10_RW_ONT_RPE_24h_2h/test/"
 
 vargs <- strsplit(args, ",")
 
 set1 <- vargs[[3]]
-#set2 <- vargs[[4]]
+set2 <- vargs[[4]]
 
-cat("set1 = ", set1, "\n", sep = " ")
-#cat("set2 = ", set2, "\n", sep = " ")
+#set1 <- c("barcode06", "barcode07", "barcode05", "barcode09")
+#set1 <- c("barcode06", "barcode05")
+set1 <- factor(set1, levels = set1)
+#set2 <- c("barcode06", "barcode10", "barcode11", "barcode12")
+set2 <- factor(set2, levels = set2)
+
+cat("set1 = ", as.character(set1), "\n", sep = " ")
+cat("set2 = ", as.character(set2), "\n", sep = " ")
 
 barcode_dirs <-dir(path = working_directory, pattern = "^barcode[0-9]+.detect_chunks", all.files = FALSE, full.names = TRUE, recursive = FALSE) 
 
 barcodes <- gsub(".detect_chunks", "", basename(barcode_dirs))
 
-file_list <- list()
-i <- 1
-for (i in seq_along(barcode_dirs)) {
-  file_list[[i]] <- list.files(barcode_dirs[i], pattern = "xx", full.names = TRUE)
+#### functions ############
+
+# loading each barcode data
+loadBarcode <- function(chunk_directory, barcode) {
+  file_list <- list.files(chunk_directory, pattern = "xx", full.names = TRUE)
+  reads <- lapply(file_list, read.table, sep = "\t", skip = 1)
+  headers <- sapply(file_list, scan, what = "character", nlines = 1, sep = " ", quiet = TRUE)
+  readIDs <- sapply(strsplit(as.character(headers[1,]), split = ">"), "[[", 2)
+  names(reads) <- readIDs
+  reads_df <- bind_rows(reads, .id = "readID")
+  colnames(reads_df) <- c("readID", "position", "probability", "kmer")
+  reads_df <- reads_df %>% mutate(barcode = barcode)
+  return(reads_df)
 }
 
-names(file_list) <- barcodes
-
-print("Imported filelist")
-
-# pulls out header line and splits by sep into matrix
-headers <- list()
-i <- 1
-for (i in seq_along(barcodes)) {
-  headers[[i]] <- sapply(file_list[[i]], scan, what = "character", nlines = 1, sep = " ", quiet = TRUE)
+# plot frequency plot of all probabilities
+plotProb_freq <- function(df, barcode) {
+  plot1 <- ggplot(df, aes(x = probability, y = after_stat(density))) +
+    geom_histogram(binwidth = 0.005) +
+    theme_bw() +
+    xlab("BrdU probability") +
+    ylab("Frequency") +
+    ggtitle(paste0(barcode, " BrdU probability frequency"))
+  
+#  ggsave(paste0(save_directory, barcode, "_prob_freq.pdf"), plot = plot1 + scale_x_continuous(limits = c(-0.01,1)), width = 7, height = 4)
+#  ggsave(paste0(save_directory, barcode, "_prob_freq_trim.pdf"), plot = plot1 + scale_x_continuous(limits = c(0.1, 1)), width = 7, height = 4)
+  
+  plot_freq <- plot_freq + geom_histogram(data = df, binwidth = 0.005, alpha = 0.1)
+  return(plot_freq)
 }
 
-names(headers) <- barcodes
-
-readIDs <- list()
-i <- 1
-for (i in seq_along(barcodes)) {
-  readIDs[[i]] <- sapply(strsplit(as.character(headers[[i]][1,]), split = ">"), "[[", 2)
+# plot histogram plot of all probabilities
+plotProb_hist <- function(df, barcode) {
+  plot1 <- ggplot(df, aes(x = probability)) +
+    geom_histogram(binwidth = 0.005) +
+    theme_bw() +
+    xlab("BrdU probability") +
+    ylab("Count") +
+    ggtitle(paste0(barcode, " BrdU probability histogram"))
+  
+#  ggsave(paste0(save_directory, barcode, "_prob_hist.pdf"), plot = plot1 + scale_x_continuous(limits = c(-0.01,1)), width = 7, height = 4)
+#  ggsave(paste0(save_directory, barcode, "_prob_hist_trim.pdf"), plot = plot1 + scale_x_continuous(limits = c(0.1, 1)), width = 7, height = 4)
+  
+  plot_hist <- plot_hist + geom_histogram(data = df, binwidth = 0.005, alpha = 0.1)
+  return(plot_hist)
 }
 
-names(readIDs) <- barcodes
-
-#make list of data frames, one for each read
-reads <- list()
-i <- 1
-for (i in seq_along(barcodes)) {
-  reads[[i]] <- lapply(file_list[[i]], read.table, sep = "\t", skip = 1)
+# single value for fraction of Ts > 0.5
+fractionGreaterThan0.5 <- function(df) {
+  summary_df <- df %>% 
+    group_by(barcode) %>%
+    summarise(n = n(), "GreaterThan0.5" = sum(probability > 0.5), "FractionGreaterThan0.5" = GreaterThan0.5 / n)
+  fractBrdU <- bind_rows(fractBrdU, summary_df)
+  return(fractBrdU)
 }
 
-names(reads) <- barcodes
-for (i in seq_along(barcodes)) {
-  names(reads[[i]]) <- readIDs[[i]]
+# per read fraction Ts > 0.5
+readFractionGreaterThan0.5 <- function(df, barcode) {
+  summary_df <- df %>% 
+    group_by(readID) %>%
+    summarise(Ts = n(), "GreaterThan0.5" = sum(probability > 0.5), "FractionGreaterThan0.5" = GreaterThan0.5 / Ts) %>%
+    mutate(barcode = as.character(barcode))
+  readFractBrdU <- bind_rows(readFractBrdU, summary_df)
+  return(readFractBrdU)
 }
 
-print("Imported files")
-str(reads)
+#########################
+#set1
 
-# filter out any reads not long enough, from list and all vectors to iterate over
-#long_enough <- sapply(reads, nrow) >= window
-#reads <- reads[long_enough]
-#file_list <- file_list[long_enough]
-#readIDs <- readIDs[long_enough]
-#chromosomes <- chromosomes[long_enough]
-#starts <- starts[long_enough]
-#ends <- ends[long_enough]
-#strands <- strands[long_enough]
+# empty frequency and histogram plots for adding barcode data to
 
-# make reads list into tibble
+df <- data.frame(readID = character(0), position = integer(0), probability = numeric(0), kmer = character(0), barcode = character(0))
+plot_freq <- ggplot(df, aes(x = probability, y = after_stat(density), colour = barcode, fill = barcode)) +
+  theme_bw() +
+  xlab("BrdU probability") +
+  ylab("Frequency") +
+  ggtitle("BrdU probability frequency")
 
-barcode_list <- list()
-i <- 1
-for (i in seq_along(barcodes)) {
-  barcode_list[[i]] <- bind_rows(reads[[i]], .id = "readID")
+plot_hist <- ggplot(df, aes(x = probability, colour = barcode, fill = barcode)) +
+  theme_bw() +
+  xlab("BrdU probability") +
+  ylab("Count") +
+  ggtitle("BrdU probability histogram")
+
+# empty fraction greater than 0.5 dfs for adding to
+
+fractBrdU <- tibble()
+readFractBrdU <- data.frame(readID = character(0), Ts = integer(0), GreaterThan0.5 = integer(0), FractionGreaterThan0.5 = double(0), barcode = character(0))
+
+###############################
+
+# for loop for barcodes in set1
+
+for (i in seq_along(set1)) {
+  print(paste0("Set1[i] = ", set1[i]))
+  barcode_df <- loadBarcode(paste0(working_directory, set1[i], ".detect_chunks"), set1[i])
+  print(paste0("reads imported"))
+  plot_freq <- plotProb_freq(barcode_df, set1[i])
+  plot_hist <- plotProb_hist(barcode_df, set1[i])
+  fractBrdU <- fractionGreaterThan0.5(barcode_df)
+  readFractBrdU <- readFractionGreaterThan0.5(barcode_df, set1[i])
+  print(paste0("Individual plots made"))
 }
-names(barcode_list) <- barcodes
+  
 
-str(barcode_list)
+###############################
+# save fractBrdU and readFractBrdU
 
-barcode_df <- bind_rows(barcode_list, .id = "barcode")
-colnames(barcode_df) <- c("barcode", "readID", "position", "probability", "kmer")
+write_csv(fractBrdU, paste0(save_directory, "set1_FractionGreaterThan0.5.csv"))
+write_csv(readFractBrdU, paste0(save_directory, "set1_readFractionGreaterThan0.5.csv"))
 
-print("made dataframe")
+print(paste0("Set1 .csv saved"))
+
+# make set1 plots
+
+ggsave(paste0(save_directory, "set1_prob_freq.pdf"), plot = plot_freq + scale_x_continuous(limits = c(-0.01,1)), width = 7, height = 4)
+ggsave(paste0(save_directory, "set1_prob_freq_trim.pdf"), plot = plot_freq + scale_x_continuous(limits = c(0.1,1)), width = 7, height = 4)
+ggsave(paste0(save_directory, "set1_prob_hist.pdf"), plot = plot_hist + scale_x_continuous(limits = c(-0.01,1)), width = 7, height = 4)
+ggsave(paste0(save_directory, "set1_prob_hist_trim.pdf"), plot = plot_hist + scale_x_continuous(limits = c(0.1,1)), width = 7, height = 4)
+
+ggsave(paste0(save_directory, "set1_prob_freq_facet.pdf"), plot = plot_freq + scale_x_continuous(limits = c(-0.01,1)) + facet_wrap(~ barcode), width = 7, height = 4)
+ggsave(paste0(save_directory, "set1_prob_freq_facet_trim.pdf"), plot = plot_freq + scale_x_continuous(limits = c(0.1,1)) + facet_wrap(~ barcode), width = 7, height = 4)
+ggsave(paste0(save_directory, "set1_prob_hist_facet.pdf"), plot = plot_hist + scale_x_continuous(limits = c(-0.01,1)) + facet_wrap(~ barcode), width = 7, height = 4)
+ggsave(paste0(save_directory, "set1_prob_hist_facet_trim.pdf"), plot = plot_hist + scale_x_continuous(limits = c(0.1,1)) + facet_wrap(~ barcode), width = 7, height = 4)
+
+print(paste0("Set1 plots made"))
+
+# save fractBrdU and readFractBrdU
+
+write_csv(fractBrdU, paste0(save_directory, "set1_FractionGreaterThan0.5.csv"))
+write_csv(readFractBrdU, paste0(save_directory, "set1_readFractionGreaterThan0.5.csv"))
+
+print(paste0("Set1 .csv saved"))
+
+########### 
+#set 2
+
+# empty frequency and histogram plots for adding barcode data to
+
+df <- data.frame(readID = character(0), position = integer(0), probability = numeric(0), kmer = character(0), barcode = character(0))
+plot_freq <- ggplot(df, aes(x = probability, y = after_stat(density), colour = barcode, fill = barcode)) +
+  theme_bw() +
+  xlab("BrdU probability") +
+  ylab("Frequency") +
+  ggtitle("BrdU probability frequency")
+
+plot_hist <- ggplot(df, aes(x = probability, colour = barcode, fill = barcode)) +
+  theme_bw() +
+  xlab("BrdU probability") +
+  ylab("Count") +
+  ggtitle("BrdU probability histogram")
+
+# empty fraction greater than 0.5 dfs for adding to
+
+fractBrdU <- tibble()
+readFractBrdU <- data.frame(readID = character(0), Ts = integer(0), GreaterThan0.5 = integer(0), FractionGreaterThan0.5 = double(0), barcode = character(0))
+
+###############################
+
+# for loop for barcodes in set2
+
+for (i in seq_along(set2)) {
+  print(paste0("Set2[i] = ", set2[i]))
+  barcode_df <- loadBarcode(paste0(working_directory, set2[i], ".detect_chunks"), set2[i])
+  print(paste0("reads imported"))
+  plot_freq <- plotProb_freq(barcode_df, set2[i])
+  plot_hist <- plotProb_hist(barcode_df, set2[i])
+  fractBrdU <- fractionGreaterThan0.5(barcode_df)
+  readFractBrdU <- readFractionGreaterThan0.5(barcode_df, set2[i])
+  print(paste0("Individual plots made"))
+}
+
+
+###############################
+
+# make set2 plots
+
+ggsave(paste0(save_directory, "set2_prob_freq.pdf"), plot = plot_freq + scale_x_continuous(limits = c(-0.01,1)), width = 7, height = 4)
+ggsave(paste0(save_directory, "set2_prob_freq_trim.pdf"), plot = plot_freq + scale_x_continuous(limits = c(0.1,1)), width = 7, height = 4)
+ggsave(paste0(save_directory, "set2_prob_hist.pdf"), plot = plot_hist + scale_x_continuous(limits = c(-0.01,1)), width = 7, height = 4)
+ggsave(paste0(save_directory, "set2_prob_hist_trim.pdf"), plot = plot_hist + scale_x_continuous(limits = c(0.1,1)), width = 7, height = 4)
+
+ggsave(paste0(save_directory, "set2_prob_freq_facet.pdf"), plot = plot_freq + scale_x_continuous(limits = c(-0.01,1)) + facet_wrap(~ barcode), width = 7, height = 4)
+ggsave(paste0(save_directory, "set2_prob_freq_facet_trim.pdf"), plot = plot_freq + scale_x_continuous(limits = c(0.1,1)) + facet_wrap(~ barcode), width = 7, height = 4)
+ggsave(paste0(save_directory, "set2_prob_hist_facet.pdf"), plot = plot_hist + scale_x_continuous(limits = c(-0.01,1)) + facet_wrap(~ barcode), width = 7, height = 4)
+ggsave(paste0(save_directory, "set2_prob_hist_facet_trim.pdf"), plot = plot_hist + scale_x_continuous(limits = c(0.1,1)) + facet_wrap(~ barcode), width = 7, height = 4)
+
+print(paste0("Set2 plots made"))
+
+# save fractBrdU and readFractBrdU
+
+write_csv(fractBrdU, paste0(save_directory, "set2_FractionGreaterThan0.5.csv"))
+write_csv(readFractBrdU, paste0(save_directory, "set2_readFractionGreaterThan0.5.csv"))
+
+print(paste0("Set2 .csv saved"))
 
 ########### 
 
-#make single probability plots
-for (bar in barcodes) {
-  plot1 <- ggplot(filter(barcode_df, barcode == bar), aes(x = probability, y = after_stat(density))) +
-    geom_histogram(binwidth = 0.005) +
-    theme_bw() +
-    scale_x_continuous(limits = c(-0.01,1)) +
-    xlab("BrdU probability") +
-    ylab("Frequency") +
-    ggtitle(bar)
-  ggsave(paste(save_directory, "/", bar, "_probability_freq.pdf", sep = ""), plot = plot1, width = 7, height = 4)
-}
 
-# make single histogram plots
-for (bar in barcodes) {
-  plot2 <- ggplot(filter(barcode_df, barcode == bar), aes(x = probability)) +
-    geom_histogram(binwidth = 0.005) +
-    theme_bw() +
-    scale_x_continuous(limits = c(-0.01,1)) +
-    xlab("BrdU probability") +
-    ylab("Count") +
-    ggtitle(bar)
-  ggsave(paste(save_directory, "/", bar, "_probability_hist.pdf", sep = ""), plot = plot2, width = 7, height = 4)
-}
 
-# Make facet frequency and histogram plots for set 1
 
-plot3 <- ggplot(subset(barcode_df, barcode %in% set1), aes(x = probability, y = after_stat(density))) +
-  geom_histogram(binwidth = 0.005) +
-  facet_wrap(~ barcode) +
-  theme_bw() +
-  scale_x_continuous(limits = c(-0.01,1)) +
-  xlab("Fraction BrdU") +
-  ylab("Frequency")
-
-ggsave(paste(save_directory, "/set1_probability_freq.pdf", sep = ""), plot = plot3, width = 7, height = 4)
-
-plot4 <- ggplot(subset(barcode_df, barcode %in% set1), aes(x = probability)) +
-  geom_histogram(binwidth = 0.005) +
-  facet_wrap(~ barcode) +
-  theme_bw() +
-  scale_x_continuous(limits = c(-0.01,1)) +
-  xlab("Fraction BrdU") +
-  ylab("Count")
-  
-ggsave(paste(save_directory, "/set1_probability_hist.pdf", sep = ""), plot = plot4, width = 7, height = 4)
-
-# Make facet frequency and histogram plots for set 2
-
-plot5 <- ggplot(subset(barcode_df, barcode %in% set2), aes(x = probability, y = after_stat(density))) +
-  geom_histogram(binwidth = 0.005) +
-  facet_wrap(~ barcode) +
-  theme_bw() +
-  scale_x_continuous(limits = c(-0.01,1)) +
-  xlab("Fraction BrdU") +
-  ylab("Frequency")
-
-ggsave(paste(save_directory, "/set2_probability_freq.pdf", sep = ""), plot = plot5, width = 7, height = 4)
-
-plot6 <- ggplot(subset(barcode_df, barcode %in% set2), aes(x = probability)) +
-  geom_histogram(binwidth = 0.005) +
-  facet_wrap(~ barcode) +
-  theme_bw() +
-  scale_x_continuous(limits = c(-0.01,1)) +
-  xlab("Fraction BrdU") +
-  ylab("Count")
-
-ggsave(paste(save_directory, "/set2_probability_hist.pdf", sep = ""), plot = plot6, width = 7, height = 4)
-
-# plot full and trim, freq and histogram overlay plots for set1
-
-plot7 <-ggplot(subset(barcode_df, barcode %in% set1), aes(x = probability, y = after_stat(density), colour = barcode, fill = barcode)) +
-  geom_histogram(binwidth = 0.01, alpha = 0.1, position = "identity") +
-  theme_bw() +
-  scale_x_continuous(limits = c(-0.1,1)) +
-  xlab("Fraction BrdU") +
-  ylab("Frequency")
-
-ggsave(paste(save_directory, "/set1_overlay_probability_freq.pdf", sep = ""), plot = plot7, width = 7, height = 4)
-
-plot8 <-ggplot(subset(barcode_df, barcode %in% set1), aes(x = probability, y = after_stat(density), colour = barcode, fill = barcode)) +
-  geom_histogram(binwidth = 0.01, alpha = 0.1, position = "identity") +
-  theme_bw() +
-  scale_x_continuous(limits = c(0.1,1)) +
-  xlab("Fraction BrdU") +
-  ylab("Frequency")
-
-ggsave(paste(save_directory, "/set1_overlay_probability_freq_trim.pdf", sep = ""), plot = plot8, width = 7, height = 4)
-
-plot9 <-ggplot(subset(barcode_df, barcode %in% set1), aes(x = probability, colour = barcode, fill = barcode)) +
-  geom_histogram(binwidth = 0.01, alpha = 0.1, position = "identity") +
-  theme_bw() +
-  scale_x_continuous(limits = c(-0.1,1)) +
-  xlab("Fraction BrdU") +
-  ylab("Count")
-
-ggsave(paste(save_directory, "/set1_overlay_probability_hist.pdf", sep = ""), plot = plot9, width = 7, height = 4)
-
-plot10 <-ggplot(subset(barcode_df, barcode %in% set1), aes(x = probability, colour = barcode, fill = barcode)) +
-  geom_histogram(binwidth = 0.01, alpha = 0.1, position = "identity") +
-  theme_bw() +
-  scale_x_continuous(limits = c(0.1,1)) +
-  xlab("Fraction BrdU") +
-  ylab("Count")
-
-ggsave(paste(save_directory, "/set1_overlay_probability_hist_trim.pdf", sep = ""), plot = plot10, width = 7, height = 4)
-
-# plot full and trim, freq and histogram overlay plots for set2
-
-plot11 <-ggplot(subset(barcode_df, barcode %in% set2), aes(x = probability, y = after_stat(density), colour = barcode, fill = barcode)) +
-  geom_histogram(binwidth = 0.01, alpha = 0.1, position = "identity") +
-  theme_bw() +
-  scale_x_continuous(limits = c(-0.1,1)) +
-  xlab("Fraction BrdU") +
-  ylab("Frequency")
-
-ggsave(paste(save_directory, "/set2_overlay_probability_freq.pdf", sep = ""), plot = plot11, width = 7, height = 4)
-
-plot12 <-ggplot(subset(barcode_df, barcode %in% set2), aes(x = probability, y = after_stat(density), colour = barcode, fill = barcode)) +
-  geom_histogram(binwidth = 0.01, alpha = 0.1, position = "identity") +
-  theme_bw() +
-  scale_x_continuous(limits = c(0.1,1)) +
-  xlab("Fraction BrdU") +
-  ylab("Frequency")
-
-ggsave(paste(save_directory, "/set2_overlay_probability_freq_trim.pdf", sep = ""), plot = plot12, width = 7, height = 4)
-
-plot13 <-ggplot(subset(barcode_df, barcode %in% set2), aes(x = probability, colour = barcode, fill = barcode)) +
-  geom_histogram(binwidth = 0.01, alpha = 0.1, position = "identity") +
-  theme_bw() +
-  scale_x_continuous(limits = c(-0.1,1)) +
-  xlab("Fraction BrdU") +
-  ylab("Count")
-
-ggsave(paste(save_directory, "/set2_overlay_probability_hist.pdf", sep = ""), plot = plot13, width = 7, height = 4)
-
-plot14 <-ggplot(subset(barcode_df, barcode %in% set2), aes(x = probability, colour = barcode, fill = barcode)) +
-  geom_histogram(binwidth = 0.01, alpha = 0.1, position = "identity") +
-  theme_bw() +
-  scale_x_continuous(limits = c(0.1,1)) +
-  xlab("Fraction BrdU") +
-  ylab("Count")
-
-ggsave(paste(save_directory, "/set2_overlay_probability_hist_trim.pdf", sep = ""), plot = plot14, width = 7, height = 4)
-
-####################
-# single value for fraction of Ts > 0.5
-SummaryTable <- barcode_df %>% 
-                  group_by(barcode) %>%
-                  summarise(n = n(), "GreaterThan0.5" = sum(probability > 0.5), "FractionGreaterThan0.5" = GreaterThan0.5 / n)
-SummaryTable
-
-write_csv(SummaryTable, paste0(save_directory, "/FractionGreaterThan0.5.csv"))
