@@ -53,7 +53,7 @@ Optional parameters/flags:
 	-g				perform basecalling and mapping, default is off, if off requires indexed bam
 					file called alignments.sorted, and sequencing_summary.txt to be present in
 					-a </path/to/save/run/files> or use -m to map from fastq.
-					Make sure -a doesn't contain any files/folders that could be overwritten.
+					Make sure -a does not contain any files/folders that could be overwritten.
 	-m				to do just mapping. Default it off. If using this option it requires
 					reads.fastq file in -a directory. Or chose other file with -q.
 	-q				Use with -m, path to fastq file if not called reads.fastq and in -a directory.
@@ -242,35 +242,46 @@ function parse_params() {
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function basecall_fn() {
 	# check not overwriting
-#	[[ -f "$RUNPATH"reads.fastq ]] && die "Exit as reads.fastq already exists in -a directory"
+	# [[ -f "$RUNPATH"reads.fastq ]] && die "Exit as reads.fastq already exists in -a directory"
 
-	local command1=(mkdir "$RUNPATH""$SAVEDIR"/logfiles/guppy_logfiles)
-	local command2=(touch "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt \
-						"$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt)
+	local command1="mkdir $RUNPATH$SAVEDIR/logfiles/guppy_logfiles"
+	local command2="touch $RUNPATH$SAVEDIR/logfiles/guppy_output.txt \
+						$RUNPATH$SAVEDIR/logfiles/minimap_output.txt"
 
 	#use guppy to basecall fast5 files to generate fastq files, StdOut saved to guppy_ouput.txt
-	local command3=(guppy_basecaller -i "$FAST5" -s "$RUNPATH" \
-					-c "$guppy_model_dir""$guppy_model" -r \
-					-x 'cuda:0' > "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt)
+	local command3="guppy_basecaller -i $FAST5 -s $RUNPATH "
+	command3+="-c \$guppy_model_dir$guppy_model -r "
+	if [[ "$RUNSCRIPT" == "EI" ]]; then
+		command3+="-x 'cuda:0,1'"
+	else
+		command3+="-x 'cuda:0'"
+	fi
+	command3+=" > $RUNPATH$SAVEDIR/logfiles/guppy_output.txt"
 
 	#tidy output
-	local command4=(mkdir "$RUNPATH"fastq_files)
-	local command5=(mv "$RUNPATH"*.log "$RUNPATH""$SAVEDIR"/logfiles/guppy_logfiles)
-	local command6=(mv "$RUNPATH"*.fastq "$RUNPATH"fastq_files)
-	local command7=(cat "$RUNPATH"fastq_files/*.fastq > "$RUNPATH"reads.fastq)
+	local command4="mkdir $RUNPATHfastq_files"
+	local command5="mv $RUNPATH*.log $RUNPATH$SAVEDIR/logfiles/guppy_logfiles"
+	local command6="mv $RUNPATH*.fastq $RUNPATHfastq_files"
+	local command7="cat $RUNPATHfastq_files/*.fastq > $RUNPATHreads.fastq"
 
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
-
 		# TODO: SLURM job submissions to go here
-
-		else
-		"${command1[@]}"
-		"${command2[@]}"
-		"${command3[@]}"
-		"${command4[@]}"
-		"${command5[@]}"
-		"${command6[@]}"
-		"${command7[@]}"		
+		jid2="Submitted batch job 102045"
+		echo "EI: jid1=\$(sbatch -p ei-short --wrap=\"$command1\")"
+		echo "EI: jid2=\$(sbatch -p ei-short --dependency=afterok:${jid1##* } --wrap=\"$command2\")"
+		echo "EI: jid3=\$(sbatch -p ei-gpu --gres=gpu:2 --mem=64G --dependency=afterok:${jid2##* } --wrap=\"$command3\")"
+		echo "EI: jid4=\$(sbatch -p ei-short --dependency=afterok:${jid3##* } --wrap=\"$command4\")"
+		echo "EI: jid5=\$(sbatch -p ei-short --dependency=afterok:${jid4##* } --wrap=\"$command5\")"
+		echo "EI: jid6=\$(sbatch -p ei-short --dependency=afterok:${jid5##* } --wrap=\"$command6\")"
+		echo "EI: jid7=\$(sbatch -p ei-short --dependency=afterok:${jid6##* } --wrap=\"$command7\")"
+	else
+		$command1
+		$command2
+		$command3
+		$command4
+		$command5
+		$command6
+		$command7
 		# check worked
 		if [[ -f "$RUNPATH"reads.fastq ]]; then
 			info "$RUNPATH fastq files generated and tidied"
@@ -287,24 +298,23 @@ function basecall_fn() {
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function mapping_fn() {
 	#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
-	local command1=(minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" \
-		2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt \
-		| samtools view -Sb - \
-		| samtools sort - -o "$RUNPATH"alignments.sorted)
+	local command1="minimap2 -ax map-ont -t 50 \"$REFGENOME\" \"$FASTQ\" \
+		\2> \"$RUNPATH\"\"$SAVEDIR\"/logfiles/minimap_output.txt \
+		\| samtools view -Sb - \
+		\| samtools sort - -o \"$RUNPATH\"alignments.sorted"
 
-	local command2=(samtools index "$RUNPATH"alignments.sorted)
+	local command2="samtools index \"$RUNPATH\"alignments.sorted"
 
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
-
 		# TODO: SLURM job submissions to go here
-
+		:
 	else
-		"${command1[@]}"
-		"${command2[@]}"
+		$command1
+		$command2
 		if [[ -f "$RUNPATH"alignments.sorted ]] ; then
 			info "$FASTQ" reads mapped to reference.
 			info
-			else
+		else
 			die "Exit, $RUNPATH alignments.sorted not made, check minimap log files"
 		fi
 	fi
@@ -315,16 +325,15 @@ function mapping_fn() {
 # OUTS: None
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function regional_bam_fn() {
-	local command1=(samtools view -h -b -M -L "$REGION" \
-		-o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted)
-	local command2=(samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam)
+	local command1="samtools view -h -b -M -L \"$REGION\" \
+		-o \"$RUNPATH\"\"$SAVEDIR\"/\"$NAME\".bam \"$RUNPATH\"alignments.sorted"
+	local command2="samtools index \"$RUNPATH\"\"$SAVEDIR\"/\"$NAME\".bam"
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
-
 		# TODO: SLURM job submissions to go here
-
+		:
 	else
-		"${command1[@]}"
-		"${command2[@]}"
+		$command1
+		$command2
 	fi	
 }
 
@@ -333,16 +342,15 @@ function regional_bam_fn() {
 # OUTS: None
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function sub_bam_fn() {
-	local command1=(samtools view -h -b -s "$SUBSAMPLE" \
-		-o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted)
-    local command2=(samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam)
+	local command1="samtools view -h -b -s \"$SUBSAMPLE\" \
+		-o \"$RUNPATH\"\"$SAVEDIR\"/\"$NAME\".bam \"$RUNPATH\"alignments.sorted"
+    local command2="samtools index \"$RUNPATH\"\"$SAVEDIR\"/\"$NAME\".bam"
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
-
 		# TODO: SLURM job submissions to go here
-
+		:
 	else
-		"${command1[@]}"
-		"${command2[@]}"
+		$command1
+		$command2
 	fi	
 }
 
@@ -355,38 +363,36 @@ function dnascent_fn() {
 	if [[ ! -f "$RUNPATH"index.dnascent ]]; then
 		info "DNAscent index"
 		info
-		local command1=(DNAscent index -f "$FAST5" \
-			-s "$RUNPATH"sequencing_summary.txt \
-			-o "$RUNPATH"index.dnascent \
-			2> "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt)
+		local command1="DNAscent index -f \"$FAST5\" \
+			-s \"$RUNPATH\"sequencing_summary.txt \
+			-o \"$RUNPATH\"index.dnascent \
+			2> \"$RUNPATH\"\"$SAVEDIR\"/logfiles/index_output.txt"
 		if [[ "$RUNSCRIPT" == "EI" ]]; then
-
-		# TODO: SLURM job submissions to go here
-
+			# TODO: SLURM job submissions to go here
+			:
 		else
-			"${command1[@]}"
+			$command1
 		fi	
 	fi
 
 	info
 	info "DNAscent detect"
 	info
-	local command2=(DNAscent detect -b "$BAM" -r "$REFGENOME" \
-		-i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$NAME".detect \
-		-t 50 --GPU 0 -l "$DETECTTHRESHOLD" \
-		2> "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt)
+	local command2="DNAscent detect -b \"$BAM\" -r \"$REFGENOME\" \
+		-i \"$RUNPATH\"index.dnascent -o \"$RUNPATH\"\"$SAVEDIR\"/\"$NAME\".detect \
+		-t 50 --GPU 0 -l \"$DETECTTHRESHOLD\" \
+		2> \"$RUNPATH\"\"$SAVEDIR\"/logfiles/detect_output.txt"
 
-	local command3=(python "$python_utils_dir"/dnascent2bedgraph.py \
-		-d "$RUNPATH""$SAVEDIR"/"$NAME".detect \
-		-o "$RUNPATH""$SAVEDIR"/"$NAME".detect.bedgraphs \
-		2> "$RUNPATH""$SAVEDIR"/logfiles/detect_bedgraph_output.txt)
+	local command3="python \"$python_utils_dir\"/dnascent2bedgraph.py \
+		-d \"$RUNPATH\"\"$SAVEDIR\"/\"$NAME\".detect \
+		-o \"$RUNPATH\"\"$SAVEDIR\"/\"$NAME\".detect.bedgraphs \
+		2> \"$RUNPATH\"\"$SAVEDIR\"/logfiles/detect_bedgraph_output.txt"
 
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
-
 		# TODO: SLURM job submissions to go here
-
+		:
 	else
-		"${command2[@]}"
+		$command2
 
 		if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".detect ]] ; then
 			info "$RUNPATH""$SAVEDIR" detect complete.
@@ -395,7 +401,13 @@ function dnascent_fn() {
 			die "Exit, detect file not made, check detect log files"
 		fi
 		info "make detect bedgraphs"
-		"${command3[@]}"
+		$command3
+		if [[ -d "$RUNPATH""$SAVEDIR"/"$NAME".detect.bedgraphs ]]; then
+        	info
+        	info "$RUNPATH""$SAVEDIR" detect bedgraphs saved.
+        else
+        	die "Exit, $NAME.detect.bedgraphs folder not found. Check bedgraphs logfile"
+        fi
 	fi	
 }
 
@@ -404,29 +416,29 @@ function dnascent_fn() {
 # OUTS: StdErr saved to forkSense_output.txt
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function forksense_fn() {
-	local command1=(touch "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt)
+	local command1="touch \"$RUNPATH\"\"$SAVEDIR\"/logfiles/forkSense_output.txt"
 	info "DNAscent forkSense"
 	info
-	local command2=(DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$NAME".detect \
-		-o "$RUNPATH""$SAVEDIR"/"$NAME".forkSense --markOrigins --markTerminations \
-		2> "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt)
+	local command2="DNAscent forkSense -d \"$RUNPATH\"\"$SAVEDIR\"/\"$NAME\".detect \
+		-o \"$RUNPATH\"\"$SAVEDIR\"/\"$NAME\".forkSense --markOrigins --markTerminations \
+		2> \"$RUNPATH\"\"$SAVEDIR\"/logfiles/forkSense_output.txt"
 	# to fix forksense save location bug
-	local command3=(mv "$RUNPATH"origins_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR")
-	local command4=(mv "$RUNPATH"terminations_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR")
-	local command5=(python "$python_utils_dir"/dnascent2bedgraph.py \
-		-f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense \
-		-o "$RUNPATH""$SAVEDIR"/"$NAME".forksense.bedgraphs \
-		2> "$RUNPATH"/"$SAVEDIR"/logfiles/forkSense_bedgraph_output.txt)
+	local command3="mv \"$RUNPATH\"origins_DNAscent_forkSense.bed \"$RUNPATH\"\"$SAVEDIR\""
+	local command4="mv \"$RUNPATH\"terminations_DNAscent_forkSense.bed \"$RUNPATH\"\"$SAVEDIR\""
+	local command5="python \"$python_utils_dir\"/dnascent2bedgraph.py \
+		-f \"$RUNPATH\"\"$SAVEDIR\"/\"$NAME\".forkSense \
+		-o \"$RUNPATH\"\"$SAVEDIR\"/\"$NAME\".forksense.bedgraphs \
+		2> \"$RUNPATH\"/\"$SAVEDIR\"/logfiles/forkSense_bedgraph_output.txt"
 
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
 
 		# TODO: SLURM job submissions to go here
-
+		:
 	else
-		"${command1[@]}"
-		"${command2[@]}"
-		"${command3[@]}"
-		"${command4[@]}"
+		$command1
+		$command2
+		$command3
+		$command4
 
 		if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense ]]; then
 			info "$RUNPATH""$SAVEDIR" forksense complete.
@@ -435,7 +447,14 @@ function forksense_fn() {
 			die "Exit, forksense file not found, check forksense log file"
 		fi
 		info "make forksense bedgraphs"
-		"${command5[@]}"
+		$command5
+		if [[ -d "$RUNPATH""$SAVEDIR"/"$NAME".forksense.bedgraphs ]]; then
+			info
+			info "$RUNPATH""$SAVEDIR" forksense bedgraphs saved.
+		else
+			die "Exit, $NAME.forksense.bedgraphs folder not found. Check bedgraphs logfile"
+		fi
+
 	fi
 
 }
@@ -495,6 +514,7 @@ function info() {
 	    echo "INFO: $@" 
 	else
 		echo "INFO: $@" > "$RUNPATH""$SAVEDIR"/logfiles/summary.txt 
+	fi
 }
 
 # DESC: Prints variables those variables that have been set, if verbose true
@@ -566,24 +586,9 @@ fi
 # Also generates bedgraphs from the detect files
 dnascent_fn
 
-if [[ -d "$RUNPATH""$SAVEDIR"/"$NAME".detect.bedgraphs ]]; then
-        echo
-        echo "$RUNPATH""$SAVEDIR" detect bedgraphs saved.
-        else
-        die "Exit, $NAME.detect.bedgraphs folder not found. Check bedgraphs logfile"
-fi
-
 # (optional) run (-f) DNAscent 2.0 forksense,
 # StdErr saved to forkSense_output.txt
 # Also generate bedgraphs from the forksense output
 if [[ "$FORKSENSE" == true ]]; then
 	forksense_fn
-
-	if [[ -d "$RUNPATH""$SAVEDIR"/"$NAME".forksense.bedgraphs ]]; then
-		info
-		info "$RUNPATH""$SAVEDIR" forksense bedgraphs saved.
-		else
-		die "Exit, $NAME.forksense.bedgraphs folder not found. Check bedgraphs logfile"
-	fi
 fi
-
