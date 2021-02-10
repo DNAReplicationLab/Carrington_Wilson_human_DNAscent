@@ -79,7 +79,8 @@ function UoO_init() {
 	export PATH=/data/software_local/minimap2-2.10:$PATH		# path to minimap2
 	export PATH=/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin:$PATH				# path to DNAscent v2
 	readonly python_utils_dir="/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils"	# path to DNAscent v2 utilities
-	readonly guppy_model_dir="/data/software_local/guppy_legacy/v3.6/data/"										# path to guppy model files
+	readonly guppy_model_dir="/data/software_local/guppy_legacy/v3.6/data/"								# path to guppy model files
+	minimap_threads=50
 }
 
 # DESC: Script initialisation for use on EI HPC at NRP
@@ -87,12 +88,13 @@ function UoO_init() {
 # OUTS: Nothing yet
 # NOTE: This is where to add anything specific to running on the EI HPC.
 function EI_HPC_init() {
-	source package 0e96b5e6-3f41-4d6f-91cc-1b6d7ad05ef5			# guppy - 4.0.14
+	source package 1c09988d-4ecc-4c66-916c-efbbb9a9fed7			# guppy - 4.0.11
 	source package /tgac/software/testing/bin/minimap2-2.17		# minimap2 - 2.17
 	source package 758be80b-33cc-495a-9adc-11882ab145b1			# samtools - 1.10
 	source /ei/software/staging/CISSUPPORT-12154/stagingloader	# DNAscent - 2.0.2
 	readonly python_utils_dir="/ei/projects/a/ac9cb897-b4c0-44d0-a54b-2ddf13310bc4/data/scripts"	# path to DNAscent v2 utilities
 	readonly guppy_model_dir=""									# path to guppy model files - empty, since not required
+	minimap_threads=62
 	# Create a (hopefully) unique prefix for the names of all jobs in this 
 	# particular run of the pipeline. This makes sure that runs can be
 	# identified unambiguously
@@ -250,30 +252,30 @@ function basecall_fn() {
 
 	#use guppy to basecall fast5 files to generate fastq files, StdOut saved to guppy_ouput.txt
 	local command3="guppy_basecaller -i $FAST5 -s $RUNPATH "
-	command3+="-c \$guppy_model_dir$guppy_model -r "
+	command3+="-c $guppy_model_dir$guppy_model -r "
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
 		command3+="-x 'cuda:0,1'"
 	else
 		command3+="-x 'cuda:0'"
 	fi
-	command3+=" > $RUNPATH$SAVEDIR/logfiles/guppy_output.txt"
+	command3+=" > ${RUNPATH}${SAVEDIR}/logfiles/guppy_output.txt"
 
 	#tidy output
-	local command4="mkdir $RUNPATHfastq_files"
-	local command5="mv $RUNPATH*.log $RUNPATH$SAVEDIR/logfiles/guppy_logfiles"
-	local command6="mv $RUNPATH*.fastq $RUNPATHfastq_files"
-	local command7="cat $RUNPATHfastq_files/*.fastq > $RUNPATHreads.fastq"
+	local command4="mkdir ${RUNPATH}fastq_files"
+	local command5="mv ${RUNPATH}*.log ${RUNPATH}${SAVEDIR}/logfiles/guppy_logfiles"
+	local command6="mv ${RUNPATH}*.fastq ${RUNPATH}fastq_files"
+	local command7="cat ${RUNPATH}fastq_files/*.fastq > ${RUNPATH}reads.fastq"
 
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
-		# TODO: SLURM job submissions to go here
-		jid2="Submitted batch job 102045"
-		echo "EI: jid1=\$(sbatch -p ei-short --wrap=\"$command1\")"
-		echo "EI: jid2=\$(sbatch -p ei-short --dependency=afterok:${jid1##* } --wrap=\"$command2\")"
-		echo "EI: jid3=\$(sbatch -p ei-gpu --gres=gpu:2 --mem=64G --dependency=afterok:${jid2##* } --wrap=\"$command3\")"
-		echo "EI: jid4=\$(sbatch -p ei-short --dependency=afterok:${jid3##* } --wrap=\"$command4\")"
-		echo "EI: jid5=\$(sbatch -p ei-short --dependency=afterok:${jid4##* } --wrap=\"$command5\")"
-		echo "EI: jid6=\$(sbatch -p ei-short --dependency=afterok:${jid5##* } --wrap=\"$command6\")"
-		echo "EI: jid7=\$(sbatch -p ei-short --dependency=afterok:${jid6##* } --wrap=\"$command7\")"
+		# IN PROGRESS: SLURM job submissions to go here
+		jid1=$(sbatch -p ei-short --wrap="$command1")
+		jid2=$(sbatch -p ei-short --dependency=afterok:${jid1##* } --wrap="$command2")
+		jid3=$(sbatch -p ei-gpu --gres=gpu:2 --mem=64G --dependency=afterok:${jid2##* } --wrap="$command3")
+		jid4=$(sbatch -p ei-short --dependency=afterok:${jid3##* } --wrap="$command4")
+		jid5=$(sbatch -p ei-short --dependency=afterok:${jid4##* } --wrap="$command5")
+		jid6=$(sbatch -p ei-short --dependency=afterok:${jid5##* } --wrap="$command6")
+		jid7=$(sbatch -p ei-short --dependency=afterok:${jid6##* } --wrap="$command7")
+		echo "EI: $jid1 $jid2 $jid3 $jid4 $jid5 $jid6 $jid7"
 	else
 		$command1
 		$command2
@@ -298,16 +300,22 @@ function basecall_fn() {
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function mapping_fn() {
 	#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
-	local command1="minimap2 -ax map-ont -t 50 \"$REFGENOME\" \"$FASTQ\" \
-		\2> \"$RUNPATH\"\"$SAVEDIR\"/logfiles/minimap_output.txt \
-		\| samtools view -Sb - \
-		\| samtools sort - -o \"$RUNPATH\"alignments.sorted"
+	local command1="minimap2 -ax map-ont -t $minimap_threads $REFGENOME $FASTQ \
+		2> ${RUNPATH}${SAVEDIR}/logfiles/minimap_output.txt \
+		| samtools view -@ $minimap_threads -Sb - \
+		| samtools sort -@ $minimap_threads - -o ${RUNPATH}alignments.sorted.bam"
 
-	local command2="samtools index \"$RUNPATH\"alignments.sorted"
+	local command2="samtools index -@ $minimap_threads ${RUNPATH}alignments.sorted.bam"
 
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
-		# TODO: SLURM job submissions to go here
-		:
+		# IN PROGRESS: SLURM job submissions to go here
+		if [[ "$BASECALL" == true ]]; then
+			jid8=$(sbatch -p ei-medium --mem=256G -c 32 --dependency=afterok:${jid7##* } --wrap="$command1")
+		else
+			jid8=$(sbatch -p ei-medium --mem=256G -c 32 --wrap="$command1")
+		fi
+		jid9=$(sbatch -p ei-medium --mem=256G -c 32 --dependency=afterok:${jid8##* } --wrap="$command2")
+		echo "EI: $jid8 $jid9"
 	else
 		$command1
 		$command2
