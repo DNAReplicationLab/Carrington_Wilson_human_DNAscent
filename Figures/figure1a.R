@@ -14,30 +14,22 @@ library(readr)
 library(tibble)
 
 args = commandArgs(trailingOnly = TRUE)
-#working_directory <- "/Users/rose/Data/Nanopore/2018_09_10_RW_ONT_RPE_24h_2h/"
 
 working_directory <- args[1]
 
 save_directory <- args[2]
-#save_directory <- "/Users/rose/Data/Nanopore/2018_09_10_RW_ONT_RPE_24h_2h/test/"
 
 vargs <- strsplit(args, ",")
 
 set1 <- vargs[[3]]
 set1_names <- vargs[[4]]
 
-#set1 <- c("barcode06", "barcode07", "barcode05", "barcode09")
-#set1 <- c("barcode06", "barcode05")
 set1 <- factor(set1, levels = set1)
-#set1_names <- c("0.0uM", "1.5uM", "10uM", "50uM")
-#set1_names <- c("0.0uM", "1.5uM")
 set1_names <- factor(set1_names, levels = set1_names)
 
-#set_name <- "RPE1_2hr"
 set_name <- args[5]
 
 cat("set1 = ", set1, "\n", sep = " ")
-cat("set2 = ", set2, "\n", sep = " ")
 
 barcode_dirs <-dir(path = working_directory, pattern = "^barcode[0-9]+.detect_chunks", all.files = FALSE, full.names = TRUE, recursive = FALSE) 
 
@@ -133,22 +125,12 @@ rm(barcode_df)
 
 # save fractBrdU and readFractBrdU
 
-write_csv(fractBrdU, paste0(save_directory, "set1_FractionGreaterThan0.5.csv"))
-write_csv(readFractBrdU, paste0(save_directory, "set1_readFractionGreaterThan0.5.csv"))
+write_csv(fractBrdU, paste0(save_directory, set_name, "_FractionGreaterThan0.5.csv"))
+write_csv(readFractBrdU, paste0(save_directory, set_name, "_readFractionGreaterThan0.5.csv"))
 
 rm(readFractBrdU)
 
 print(paste0("Set1 .csv saved"))
-
-# make set1 plots
-
-#ggsave(paste0(save_directory, "set1_prob_freq.pdf"), plot = plot_freq + coord_cartesian(xlim=c(0,1)), width = 7, height = 4)
-#ggsave(paste0(save_directory, "set1_prob_freq_trim.pdf"), plot = plot_freq + coord_cartesian(xlim=c(0.1,1)), width = 7, height = 4)
-
-#ggsave(paste0(save_directory, "set1_prob_freq_facet.pdf"), plot = plot_freq + coord_cartesian(xlim=c(0,1)) + facet_wrap(~ barcode), width = 7, height = 4)
-#ggsave(paste0(save_directory, "set1_prob_freq_facet_trim.pdf"), plot = plot_freq + coord_cartesian(xlim=c(0.1,1)) + facet_wrap(~ barcode), width = 7, height = 4)
-
-#print(paste0("Set1 plots made"))
 
 ########### 
 
