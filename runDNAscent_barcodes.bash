@@ -3,7 +3,7 @@
 # Purpose: to process fast5 (or bam) files from nanopore run through to the end of DNAscent. ONLY FOR BARCODED RUNS
 # Before you start create a folder where you would like to save whole run files (-a below), this will be </folder/to/save/run/files> and if you are not basecalling, a barcodes.txt file with the names of the barcode folders eg barcode01
 
-# Usage: bash runDNAscent.bash -f </path/to/fast5/files> -a </path/to/save/whole/run/files> -o <name for ouput directory> -r </path/to/reference/genome> [ optional: -g | -m ] [ optional: -b <barcode_kit_name> -k -d <detect threshold> -n <output name> ] [optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
+# Usage: bash runDNAscent_barcodes.bash -f </path/to/fast5/files> -a </path/to/save/whole/run/files> -o <name for ouput directory> -r </path/to/reference/genome> [ optional: -g | -m require -c </path/to/chr/bed>] [ optional: -b <barcode_kit_name> -k -d <detect threshold> -n <output name> ] [optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
 
 # If using forksense run in -a directory as there was a bug (now fixed?) that origin and termination bed files are saved to pwd then move to -o.
 # MUST use absolute paths.
