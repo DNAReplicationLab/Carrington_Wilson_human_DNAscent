@@ -68,21 +68,21 @@ plotProb_freq <- function(df, barcode, name) {
   write_csv(freq_df, paste0(save_directory, set_name, "_", name, "freq_data.csv"))
 }
 
-# single value for fraction of Ts > 0.5
+# single value for fraction of Ts >= 0.5
 fractionGreaterThan0.5 <- function(df, name) {
   summary_df <- df %>% 
     group_by(barcode) %>%
-    summarise(n = n(), "GreaterThan0.5" = sum(probability > 0.5), "FractionGreaterThan0.5" = GreaterThan0.5 / n) %>%
+    summarise(n = n(), "GreaterThan0.5" = sum(probability >= 0.5), "FractionGreaterThan0.5" = GreaterThan0.5 / n) %>%
     mutate(sample = name)
   fractBrdU <- bind_rows(fractBrdU, summary_df)
   return(fractBrdU)
 }
 
-# per read fraction Ts > 0.5
+# per read fraction Ts >= 0.5
 readFractionGreaterThan0.5 <- function(df, barcode, name) {
   summary_df <- df %>% 
     group_by(readID) %>%
-    summarise(Ts = n(), "GreaterThan0.5" = sum(probability > 0.5), "FractionGreaterThan0.5" = GreaterThan0.5 / Ts) %>%
+    summarise(Ts = n(), "GreaterThan0.5" = sum(probability >= 0.5), "FractionGreaterThan0.5" = GreaterThan0.5 / Ts) %>%
     mutate(barcode = as.character(barcode)) %>% mutate(sample = as.character(name))
   readFractBrdU <- bind_rows(readFractBrdU, summary_df)
   return(readFractBrdU)

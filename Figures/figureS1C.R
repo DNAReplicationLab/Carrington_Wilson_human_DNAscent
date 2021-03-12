@@ -14,26 +14,19 @@ library(readr)
 library(tibble)
 
 args = commandArgs(trailingOnly = TRUE)
-#working_directory <- "/Users/rose/Data/Nanopore/2018_09_10_RW_ONT_RPE_24h_2h/test/"
 
 working_directory <- args[1]
 
 save_directory <- args[2]
-#save_directory <- "/Users/rose/Data/Nanopore/2018_09_10_RW_ONT_RPE_24h_2h/test"
 
 vargs <- strsplit(args, ",")
 
 set1 <- vargs[[3]]
 set1_names <- vargs[[4]]
 
-#set1 <- c("barcode06", "barcode07", "barcode05", "barcode09")
-#set1 <- c("barcode06", "barcode05")
 set1 <- factor(set1, levels = set1)
-#set1_names <- c("0.0uM", "1.5uM", "10uM", "50uM")
-#set1_names <- c("0.0uM", "1.5uM")
 set1_names <- factor(set1_names, levels = set1_names)
 
-#set_name <- "RPE1_2hr"
 set_name <- args[5]
 
 cat("set1 = ", set1, "\n", sep = " ")
@@ -55,7 +48,7 @@ loadBarcode <- function(chunk_directory, barcode, name) {
     readID <- gsub(">", "", as.character(header[1]))
     colnames(read_df) <- c("position", "probability", "kmer")
     read_df <- read_df %>% mutate(readID = readID)
-    sum_df <- read_df %>% group_by(readID) %>% summarise(n = n(), "GreaterThan0.5" = sum(probability > 0.5), "FractionGreaterThan0.5" = GreaterThan0.5 / n)
+    sum_df <- read_df %>% group_by(readID) %>% summarise(n = n(), "GreaterThan0.5" = sum(probability >= 0.5), "FractionGreaterThan0.5" = GreaterThan0.5 / n)
     df <- bind_rows(df, sum_df)
   }
   df <- df %>% mutate(barcode = barcode, sample = name)
