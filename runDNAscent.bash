@@ -22,8 +22,9 @@ function usage() {
 	cat << EOF
 
 Usage: bash runDNAscent.bash -a </path/to/save/whole/run/files> -o <name_for_ouput directory> -f </path/to/fast5/files>
+-r </path/to/reference/genome>
 
-[ optional: -g | -m , require: -r </path/to/reference/genome>]
+[ optional: -g | -m, require -c ]
 [ optional: -q </path/to/fastq> -k -d <detect threshold> -n <output name> -v -E -h]
 [ optional: -L </path/to/bed/for/regions> | -s <INT.FRAC> ]
 
@@ -44,6 +45,7 @@ Required parameters/flags:
 					detect and forkSense files so that you can reanalyse reads with different
 					parameters without overwriting eg whole run or just specific chromosomes
 	-f				fast5 files
+	-r				reference genome for mapping
 
 Optional parameters/flags:
 
@@ -53,11 +55,13 @@ Optional parameters/flags:
 	-g				perform basecalling and mapping, default is off, if off requires indexed bam
 					file called alignments.sorted, and sequencing_summary.txt to be present in
 					-a </path/to/save/run/files> or use -m to map from fastq.
-					Make sure -a does not contain any files/folders that could be overwritten.
+					Make sure -a doesn't contain any files/folders that could be overwritten.
+					Requires -c.
 	-m				to do just mapping. Default it off. If using this option it requires
-					reads.fastq file in -a directory. Or chose other file with -q.
+					reads.fastq file in -a directory. Or chose other file with -q. Requires -c.
+	-c 				</path/to/bed/file/with/chromosomes/> Can be windowed or whole, used to remove
+					alignments mapping to placed and unplaced scaffolds. Required with -g and -m.
 	-q				Use with -m, path to fastq file if not called reads.fastq and in -a directory.
-	-r				reference genome for mapping
 	-k				to use forkSense, default off
 	-d				default is 1000 nts, same as default for dnascent detect
 	-n				default is output, suggested to use other name especially if using -L or -s
@@ -122,6 +126,7 @@ function parse_params() {
 	FAST5=''
 	BASECALL="FALSE"
 	MAPPING="FALSE"
+	CHRBED="FALSE"
 	FASTQTEMP="DEFAULT"
 	FORKSENSE="FALSE"
 	DETECTTHRESHOLD=1000
@@ -159,6 +164,10 @@ function parse_params() {
 				;;
 			-m )
 				MAPPING=true
+				;;
+			-c )
+				CHRBED="${2-}"
+				shift
 				;;
 			-q )
 				FASTQTEMP="${2-}"
@@ -203,13 +212,16 @@ function parse_params() {
 	[[ -z "${FAST5-}" ]] && die "Missing required parameter: -f </path/to/fast5>"
 	[[ -z "${RUNPATH-}" ]] && die "Missing required parameter: -a </path/to/save/whole/run/files>"
 	[[ -z "${SAVEDIR-}" ]] && die "Missing required parameter: -o <name_for_ouput directory>"
-
-	if [[ "$BASECALL" == true || "$MAPPING" == true ]] ; then
-		[[ -z "${REFGENOME-}" ]] && die "Missing required parameter: -r </path/to/refgenome>"
-	fi
+	[[ -z "${REFGENOME-}" ]] && die "Missing required parameter: -r </path/to/refgenome>"
 
 	if [[ "$BASECALL" == true ]] ; then
 		[[ -f "$RUNPATH"reads.fastq ]] && die "Reads.fastq already exists in -a directory"
+		[[ "${CHRBED}" == "FALSE" ]] && die "Require -c <chromosome/bed/file> with -g"
+	fi
+
+	if [[ "$BASECALL" == "FALSE" ]] ; then
+		[[ ! -f "$RUNPATH"sequencing_summary.txt ]] \
+		&& die "If not basecalling, require sequencing_summary.txt in -a directory"
 	fi
 
 	# TODO: add check that incompatible params aren't selected (e.g. -L and -s , if this really shouldn't ever be done)
@@ -217,6 +229,7 @@ function parse_params() {
 	if [[ "$MAPPING" == true ]]; then
 		[[ ! -f "$RUNPATH"reads.fastq && "$FASTQTEMP" == "DEFAULT" ]] \
 		&& die "Require reads.fastq in -a directory or specify -q </path/to/fastq>"
+		[[ "${CHRBED}" == "FALSE" ]] && die "Require -c <chromosome/bed/file> with -m"
 		[[ -f "$RUNPATH"alignments.sorted ]] && die "Alignments.sorted already exists in -a directory"
 	fi
 
@@ -303,9 +316,17 @@ function mapping_fn() {
 	local command1="minimap2 -ax map-ont -t $minimap_threads $REFGENOME $FASTQ \
 		2> ${RUNPATH}${SAVEDIR}/logfiles/minimap_output.txt \
 		| samtools view -@ $minimap_threads -Sb - \
-		| samtools sort -@ $minimap_threads - -o ${RUNPATH}alignments.sorted.bam"
+		| samtools sort -@ $minimap_threads - -o ${RUNPATH}temp.alignments.sorted.bam"
 
-	local command2="samtools index -@ $minimap_threads ${RUNPATH}alignments.sorted.bam"
+	local command2="samtools index -@ $minimap_threads ${RUNPATH}temp.alignments.sorted.bam"
+ 
+  # filter out supplementary alignments and alignments mapping to scaffolds
+  local command3="samtools view -@ $minimap_threads -h -F 2048 -M -L $CHRBED ${RUNPATH}temp.alignments.sorted \
+                | samtools sort -@ $minimap_threads - -o ${RUNPATH}alignments.sorted.bam"
+
+  local command4="samtools index -@ $minimap_threads ${RUNPATH}alignments.sorted.bam"
+
+  local command5="rm ${RUNPATH}temp.alignments.sorted.bam ${RUNPATH}temp.alignments.sorted.bam.bai
 
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
 		# IN PROGRESS: SLURM job submissions to go here
@@ -315,10 +336,16 @@ function mapping_fn() {
 			jid8=$(sbatch -p ei-medium --mem=256G -c 32 --wrap="$command1")
 		fi
 		jid9=$(sbatch -p ei-medium --mem=256G -c 32 --dependency=afterok:${jid8##* } --wrap="$command2")
-		echo "EI: $jid8 $jid9"
+		jid10=$(sbatch -p ei-medium --mem=256G -c 32 --dependency=afterok:${jid9##* } --wrap="$command3")
+		jid11=$(sbatch -p ei-medium --mem=256G -c 32 --dependency=afterok:${jid10##* } --wrap="$command4")
+		jid12=$(sbatch -p ei-short --mem=256G -c 32 --dependency=afterok:${jid11##* } --wrap="$command5")
+    echo "EI: $jid8 $jid9 $jid10 $jid11 $jid12"
 	else
 		$command1
 		$command2
+    $command3
+    $command4
+    $command5
 		if [[ -f "$RUNPATH"alignments.sorted ]] ; then
 			info "$FASTQ" reads mapped to reference.
 			info
