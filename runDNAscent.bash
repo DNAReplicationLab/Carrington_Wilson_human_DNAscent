@@ -53,7 +53,7 @@ Optional parameters/flags:
 	-h|--help			Displays this help
 	-v|--verbose			Displays verbose output
 	-g				perform basecalling and mapping, default is off, if off requires indexed bam
-					file called alignments.sorted, and sequencing_summary.txt to be present in
+					file called alignments.sorted.bam, and sequencing_summary.txt to be present in
 					-a </path/to/save/run/files> or use -m to map from fastq.
 					Make sure -a doesn't contain any files/folders that could be overwritten.
 					Requires -c.
@@ -70,6 +70,43 @@ Optional parameters/flags:
 	-s				to generate subsampled bam and use this bam for dnascent (-s flag in samtools view)
 
 EOF
+}
+
+# DESC: Script initialisation for use on Nieduszynski server at UoO
+# ARGS: None
+# OUTS: Exports locations for cuda libraries
+# NOTE: This is where to add anything specific to running on Nieduszynski server.
+function UoO_init() {
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
+	export PATH=/data/software_local/guppy_legacy/v3.6/bin:$PATH		# path to guppy
+	export PATH=/data/software_local/minimap2-2.10:$PATH		# path to minimap2
+	export PATH=/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin:$PATH				# path to DNAscent v2
+	readonly python_utils_dir="/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils"	# path to DNAscent v2 utilities
+	readonly guppy_model_dir="/data/software_local/guppy_legacy/v3.6/data/"								# path to guppy model files
+	minimap_threads=50
+	gpu_threads=50
+}
+
+# DESC: Script initialisation for use on EI HPC at NRP
+# ARGS: None
+# OUTS: Nothing yet
+# NOTE: This is where to add anything specific to running on the EI HPC.
+function EI_HPC_init() {
+	source package 1c09988d-4ecc-4c66-916c-efbbb9a9fed7				# guppy - 4.0.11
+	source package /tgac/software/testing/bin/minimap2-2.17			# minimap2 - 2.17
+	source package /tgac/software/testing/bin/samtools-1.10			# samtools - 1.10
+	source package 940988c7-0793-4820-800d-fd001c8974ec				# DNAscent - 2.0.2
+#	source python_anaconda-5.2.0_py3.6_cs							# python3
+	readonly python_utils_dir="/ei/projects/a/ac9cb897-b4c0-44d0-a54b-2ddf13310bc4/data/scripts"	# path to DNAscent v2 utilities
+	readonly guppy_model_dir=""										# path to guppy model files - empty, since not required
+	minimap_threads=62
+	gpu_threads=30
+	jid_list=()
+	# Create a (hopefully) unique prefix for the names of all jobs in this 
+	# particular run of the pipeline. This makes sure that runs can be
+	# identified unambiguously
+	run=$(uuidgen | tr '-' ' ' | awk '{print $1}')
 }
 
 # DESC: Exit script with the given message
@@ -97,7 +134,7 @@ function parse_params() {
 	FASTQTEMP="DEFAULT"
 	FORKSENSE="FALSE"
 	DETECTTHRESHOLD=1000
-	NAME="output"
+	OUTPUTNAME="output"
 	REGION="FALSE"
 	SUBSAMPLE="FALSE"
 
@@ -152,7 +189,7 @@ function parse_params() {
 				shift
 				;;
 			-n )
-				NAME="${2-}"
+				OUTPUTNAME="${2-}"
 				shift
 				;;
 			-L )
@@ -197,19 +234,19 @@ function parse_params() {
 		[[ ! -f "$RUNPATH"reads.fastq && "$FASTQTEMP" == "DEFAULT" ]] \
 		&& die "Require reads.fastq in -a directory or specify -q </path/to/fastq>"
 		[[ "${CHRBED}" == "FALSE" ]] && die "Require -c <chromosome/bed/file> with -m"
-		[[ -f "$RUNPATH"alignments.sorted ]] && die "Alignments.sorted already exists in -a directory"
+		[[ -f "$RUNPATH"alignments.sorted.bam ]] && die "Alignments.sorted.bam already exists in -a directory"
 	fi
 
 	if [[ "$BASECALL" == "FALSE"  &&  "$MAPPING" == "FALSE" ]]; then
-		[[ ! -f "$RUNPATH"alignments.sorted || ! -f "$RUNPATH"alignments.sorted.bai ]] \
-		&& die "If not basecalling and/or mapping, require indexed alignments.sorted bam in -a directory"
+		[[ ! -f "$RUNPATH"alignments.sorted.bam || ! -f "$RUNPATH"alignments.sorted.bai ]] \
+		&& die "If not basecalling and/or mapping, require indexed alignments.sorted.bam in -a directory"
 	fi
 
 	[[ -d "$RUNPATH""$SAVEDIR" ]] && die "Chose different name for -o save dir, already exists"
 
 # @Conrad - how to return 0 exit code from die? This returns 1 exit code, only advice not required
 	if [[ "$REGION" != "FALSE" || "$SUBSAMPLE" != "FALSE" ]]; then
-		[[ "${NAME}" == "output" ]] && die "Recommended to provide -n name with -s or -L" 0
+		[[ "${OUTPUTNAME}" == "output" ]] && die "Recommended to provide -n name with -s or -L" 0
 	fi
 
 	# commented out - there aren't any required arguments
@@ -221,58 +258,115 @@ function parse_params() {
 # DESC: basecall fast5 data with guppy to generate fastq
 # ARGS: None
 # OUTS: None
-# NOTE: This still needs to be generalised and adapted for SLURM use
+# NOTE: Now adapted and tested for SLURM use
 function basecall_fn() {
 	# check not overwriting
-#	[[ -f "$RUNPATH"reads.fastq ]] && die "Exit as reads.fastq already exists in -a directory"
+	# [[ -f "$RUNPATH"reads.fastq ]] && die "Exit as reads.fastq already exists in -a directory"
 
-	mkdir "$RUNPATH""$SAVEDIR"/logfiles/guppy_logfiles
-	touch "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt
+	local command1="mkdir ${RUNPATH}${SAVEDIR}/logfiles/guppy_logfiles"
+	local command2="touch ${RUNPATH}${SAVEDIR}/logfiles/guppy_output.txt \
+						${RUNPATH}${SAVEDIR}/logfiles/minimap_output.txt"
 
 	#use guppy to basecall fast5 files to generate fastq files, StdOut saved to guppy_ouput.txt
-	guppy_basecaller -i "$FAST5" -s "$RUNPATH" -c "$guppy_model_dir""$guppy_model" -r -x 'cuda:0' > "$RUNPATH""$SAVEDIR"/logfiles/guppy_output.txt
+	local command3="guppy_basecaller -i $FAST5 -s $RUNPATH "
+	command3+="-c $guppy_model_dir$guppy_model -r "
+	if [[ "$RUNSCRIPT" == "EI" ]]; then
+		command3+="-x 'cuda:0,1' --disable_pings"
+	else
+		command3+="-x 'cuda:0'"
+	fi
+	command3+=" > ${RUNPATH}${SAVEDIR}/logfiles/guppy_output.txt"
 
 	#tidy output
-	mkdir "$RUNPATH"fastq_files
-	mv "$RUNPATH"*.log "$RUNPATH""$SAVEDIR"/logfiles/guppy_logfiles
-	mv "$RUNPATH"*.fastq "$RUNPATH"fastq_files
-	cat "$RUNPATH"fastq_files/*.fastq > "$RUNPATH"reads.fastq
+	local command4="mkdir ${RUNPATH}fastq_files"
+	local command5="mv ${RUNPATH}*.log ${RUNPATH}${SAVEDIR}/logfiles/guppy_logfiles"
+	local command6="mv ${RUNPATH}*.fastq ${RUNPATH}fastq_files"
+	local command7="cat ${RUNPATH}fastq_files/*.fastq > ${RUNPATH}reads.fastq"
 
-	# check worked
-	if [[ -f "$RUNPATH"reads.fastq ]]; then
-		echo "$RUNPATH fastq files generated and tidied"
-		echo
-		else
-		die "Exit, $RUNPATH reads.fastq not made, check guppy log files"
+	if [[ "$RUNSCRIPT" == "EI" ]]; then
+		# IN PROGRESS: SLURM job submissions to go here
+		jid1=$(sbatch -p ei-short --mem=16G -c 1 -J "EI01_mkdir" --wrap="$command1")
+		jid2=$(sbatch -p ei-short --mem=16G -c 1 -J "EI02_touch" --wrap="$command2")
+		jid3=$(sbatch -p ei-gpu --gres=gpu:2 --mem=120G -J "EI03_guppy" --dependency=afterok:${jid2##* } --wrap="$command3")
+		jid4=$(sbatch -p ei-short --mem=16G -c 1 -J "EI04_mkdir" --wrap="$command4")
+		jid5=$(sbatch -p ei-short --mem=16G -c 1 -J "EI05_mv" --dependency=afterok:${jid3##* }:${jid1##* } --wrap="$command5")
+		jid6=$(sbatch -p ei-short --mem=16G -c 1 -J "EI06_mv" --dependency=afterok:${jid3##* }:${jid4##* } --wrap="$command6")
+		jid7=$(sbatch -p ei-short --mem=16G -c 1 -J "EI07_cat" --dependency=afterok:${jid6##* } --wrap="$command7")
+		jid_list+=("${jid1##* }" "${jid2##* }" "${jid3##* }" "${jid4##* }" "${jid5##* }" "${jid6##* }" "${jid7##* }")
+		echo "EI: $jid1 $jid2 $jid3 $jid4 $jid5 $jid6 $jid7"
+	else
+		$command1
+		$command2
+		$command3
+		$command4
+		$command5
+		$command6
+		$command7
+		# check worked
+		if [[ -f "$RUNPATH"reads.fastq ]]; then
+			info "$RUNPATH fastq files generated and tidied"
+			info
+			else
+			die "Exit, $RUNPATH reads.fastq not made, check guppy log files"
+		fi
 	fi
 }
 
 # DESC: mapping fastq data with minimap2 to generate sorted bam file (with samtools)
 # ARGS: None
 # OUTS: None
-# NOTE: This still needs to be generalised and adapted for SLURM use
+# NOTE: Now adapted and tested for SLURM use
 function mapping_fn() {
 	#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
-        minimap2 -ax map-ont -t 50 "$REFGENOME" "$FASTQ" 2> "$RUNPATH""$SAVEDIR"/logfiles/minimap_output.txt \
-                | samtools view -Sb - \
-                | samtools sort - -o "$RUNPATH"temp.alignments.sorted
+	local command1="minimap2 -ax map-ont -L --eqx -t $minimap_threads $REFGENOME $FASTQ \
+		2> ${RUNPATH}${SAVEDIR}/logfiles/minimap_output.txt \
+		| samtools sort -@ $minimap_threads - -o ${RUNPATH}temp.alignments.sorted.bam"
 
-        samtools index "$RUNPATH"temp.alignments.sorted
+#		| samtools view -@ $minimap_threads -Sb - \
 
-        # filter out supplementary alignments and alignments mapping to scaffolds
-                samtools view -h -F 2048 -M -L "$CHRBED" "$RUNPATH"temp.alignments.sorted \
-                | samtools sort - -o "$RUNPATH"alignments.sorted
+	local command2="samtools index -@ $minimap_threads ${RUNPATH}temp.alignments.sorted.bam"
+ 
+	#filter out supplementary alignments and alignments mapping to scaffolds
+	local command3="samtools view -@ $minimap_threads -buh -F 2048 -M -L $CHRBED ${RUNPATH}temp.alignments.sorted.bam \
+                | samtools sort -@ $minimap_threads - -o ${RUNPATH}alignments.sorted.bam"
 
-                samtools index "$RUNPATH"alignments.sorted
+	local command4="samtools index -@ $minimap_threads ${RUNPATH}alignments.sorted.bam"
 
-                rm "$RUNPATH"temp.alignments.sorted "$RUNPATH"temp.alignments.sorted.bai
+	local command5="rm ${RUNPATH}temp.alignments.sorted.bam ${RUNPATH}temp.alignments.sorted.bam.bai"
 
-        if [[ -f "$RUNPATH"alignments.sorted ]] ; then
-                echo "$FASTQ" reads mapped to reference.
-                echo
-                else
-                die "Exit, $RUNPATH alignments.sorted not made, check minimap log files"
-        fi
+	if [[ "$RUNSCRIPT" == "EI" ]]; then
+		# IN PROGRESS: SLURM job submissions to go here
+		if [[ "$BASECALL" == true ]]; then
+			jid8=$(sbatch -p ei-short --mem=128G -c 32 -J "EI08_minimap" --dependency=afterok:${jid7##* } --wrap="$command1")
+#			jid8=$(sbatch -p ei-medium --mem=128G -c 32 -J "EI08_minimap" --dependency=afterok:${jid7##* } --wrap="$command1")
+		else
+			jid8=$(sbatch -p ei-short --mem=128G -c 32 -J "EI08_minimap" --wrap="$command1")
+#			jid8=$(sbatch -p ei-medium --mem=128G -c 32 -J "EI08_minimap" --wrap="$command1")
+		fi
+		jid9=$(sbatch -p ei-short --mem=128G -c 32 -J "EI09_index" --dependency=afterok:${jid8##* } --wrap="$command2")
+#		jid9=$(sbatch -p ei-medium --mem=256G -c 32 -J "EI09_index" --dependency=afterok:${jid8##* } --wrap="$command2")
+		jid10=$(sbatch -p ei-short --mem=128G -c 32 -J "EI10_sort" --dependency=afterok:${jid9##* } --wrap="$command3")
+#		jid10=$(sbatch -p ei-medium --mem=256G -c 32 -J "EI10_sort" --dependency=afterok:${jid9##* } --wrap="$command3")
+		jid11=$(sbatch -p ei-short --mem=128G -c 32 -J "EI11_index" --dependency=afterok:${jid10##* } --wrap="$command4")
+#		jid11=$(sbatch -p ei-medium --mem=256G -c 32 -J "EI11_index" --dependency=afterok:${jid10##* } --wrap="$command4")
+		jid12=$(sbatch -p ei-short --mem=64G -c 1 -J "EI12_rm" --dependency=afterok:${jid10##* } --wrap="$command5")
+   		jid_list+=("${jid8##* }")
+   		jid_list+=("${jid9##* }" "${jid10##* }" "${jid11##* }" "${jid12##* }")
+	 	echo "EI: $jid8 $jid9 $jid10 $jid11 $jid12"
+    	last_jid=$jid11
+	else
+		$command1
+		$command2
+    	$command3
+    	$command4
+    	$command5
+		if [[ -f "$RUNPATH"alignments.sorted.bam ]] ; then
+			info "$FASTQ" reads mapped to reference.
+			info
+		else
+			die "Exit, $RUNPATH alignments.sorted.bam not made, check minimap log files"
+		fi
+	fi
 }
 
 # DESC: select specific regions from the bam bile with provided bed file (-L flag)
@@ -280,8 +374,16 @@ function mapping_fn() {
 # OUTS: None
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function regional_bam_fn() {
-	samtools view -h -b -M -L "$REGION" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
-	samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
+	local command1="samtools view -h -b -M -L \"$REGION\" \
+		-o \"$RUNPATH\"\"$SAVEDIR\"/\"$OUTPUTNAME\".bam \"$RUNPATH\"alignments.sorted.bam"
+	local command2="samtools index \"$RUNPATH\"\"$SAVEDIR\"/\"$OUTPUTNAME\".bam"
+	if [[ "$RUNSCRIPT" == "EI" ]]; then
+		# TODO: SLURM job submissions to go here
+		:
+	else
+		$command1
+		$command2
+	fi	
 }
 
 # DESC: subsample bam file to fraction of original size (-s flag)
@@ -289,8 +391,16 @@ function regional_bam_fn() {
 # OUTS: None
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function sub_bam_fn() {
-	samtools view -h -b -s "$SUBSAMPLE" -o "$RUNPATH""$SAVEDIR"/"$NAME".bam "$RUNPATH"alignments.sorted
-    samtools index "$RUNPATH""$SAVEDIR"/"$NAME".bam
+	local command1="samtools view -h -b -s \"$SUBSAMPLE\" \
+		-o \"$RUNPATH\"\"$SAVEDIR\"/\"$OUTPUTNAME\".bam \"$RUNPATH\"alignments.sorted.bam"
+    local command2="samtools index \"$RUNPATH\"\"$SAVEDIR\"/\"$OUTPUTNAME\".bam"
+	if [[ "$RUNSCRIPT" == "EI" ]]; then
+		# TODO: SLURM job submissions to go here
+		:
+	else
+		$command1
+		$command2
+	fi	
 }
 
 # DESC: Function to run DNAscent 2.0 detect (and index if necessary)
@@ -300,24 +410,79 @@ function sub_bam_fn() {
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function dnascent_fn() {
 	if [[ ! -f "$RUNPATH"index.dnascent ]]; then
-		echo "DNAscent index"
-		echo
-		DNAscent index -f "$FAST5" -s "$RUNPATH"sequencing_summary.txt -o "$RUNPATH"index.dnascent 2> "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt
-	fi
-
-	echo
-	echo "DNAscent detect"
-	echo
-	DNAscent detect -b "$BAM" -r "$REFGENOME" -i "$RUNPATH"index.dnascent -o "$RUNPATH""$SAVEDIR"/"$NAME".detect -t 50 --GPU 0 -l "$DETECTTHRESHOLD" 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt
-
-	if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".detect ]] ; then
-		echo "$RUNPATH""$SAVEDIR" detect complete.
-		echo
+		info "DNAscent index"
+		info
+		local command1="DNAscent index -f ${FAST5} \
+			-s ${RUNPATH}sequencing_summary.txt \
+			-o ${RUNPATH}index.dnascent \
+			2> ${RUNPATH}${SAVEDIR}/logfiles/index_output.txt"
+		if [[ "$RUNSCRIPT" == "EI" ]]; then
+			# TODO: SLURM job submissions to go here
+			echo "EI: DNAscent index..."
+			if [ -v ${last_jid+x} ]; then
+				echo "EI: no previous job"
+				jid13=$(sbatch -p ei-short --mem=64G -c 1 -J "EI13_index" --wrap="$command1")
+#				jid13=$(sbatch -p ei-medium --mem=64G -c 1 -J "EI13_index" --wrap="$command1")
+			else
+				echo "EI: previous job ${last_jid} ${last_jid##* }"
+				jid13=$(sbatch -p ei-short --mem=64G -c 1 -J "EI13_index" --dependency=afterok:${last_jid##* } --wrap="$command1")
+#				jid13=$(sbatch -p ei-medium --mem=64G -c 1 -J "EI13_index" --dependency=afterok:${last_jid##* } --wrap="$command1")
+			fi
+	   		jid_list+=(${jid13##* })
+			echo "EI: $jid13"
+	    	last_jid=$jid13
 		else
-		die "Exit, detect file not made, check detect log files"
+			$command1
+		fi	
 	fi
-	echo "make detect bedgraphs"
-	python "$python_utils_dir"/dnascent2bedgraph.py -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".detect.bedgraphs 2> "$RUNPATH""$SAVEDIR"/logfiles/detect_bedgraph_output.txt
+
+	info
+	info "DNAscent detect"
+	info
+	if [[ "$RUNSCRIPT" == "EI" ]]; then
+		local command2="DNAscent"
+	else
+		local command2="DNAscent"
+	fi
+
+	command2+=" detect -b ${BAM} -r ${REFGENOME} \
+		-i ${RUNPATH}index.dnascent -o ${RUNPATH}${SAVEDIR}/${OUTPUTNAME}.detect \
+		-t ${gpu_threads} --GPU 0 -l ${DETECTTHRESHOLD} \
+		2> ${RUNPATH}${SAVEDIR}/logfiles/detect_output.txt"
+
+	local command3="python ${python_utils_dir}/dnascent2bedgraph.py \
+		-d ${RUNPATH}${SAVEDIR}/${OUTPUTNAME}.detect \
+		-o ${RUNPATH}${SAVEDIR}/${OUTPUTNAME}.detect.bedgraphs \
+		2> ${RUNPATH}${SAVEDIR}/logfiles/detect_bedgraph_output.txt"
+
+	if [[ "$RUNSCRIPT" == "EI" ]]; then
+		# TODO: SLURM job submissions to go here
+		echo "EI: $command2"
+		jid14=$(sbatch -p ei-gpu --gres=gpu:1 -c 16 -x t128n90 -o ${LOGFILESDIR}/detect_%j_%N.out --mem=160G -J  "EI14_detect" --dependency=afterok:${last_jid##* } --wrap="$command2")
+#		jid15=$(sbatch -p ei-short --mem=256G -c 32 -o ${LOGFILESDIR}/python_%j_%N.out -J  "EI15_bedgraph" --dependency=afterok:${jid14##* } --wrap="$command3")
+		jid15=$(sbatch -p ei-medium --mem=64G -c 1 -o ${LOGFILESDIR}/python_%j_%N.out -J  "EI15_bedgraph" --dependency=afterok:${jid14##* } --wrap="$command3")
+   		jid_list+=(${jid14##* } ${jid15##* })
+    	echo "EI: $jid14 $jid15"
+    	last_jid=$jid14
+
+	else
+		$command2
+
+		if [[ -f "$RUNPATH""$SAVEDIR"/"$OUTPUTNAME".detect ]] ; then
+			info "$RUNPATH""$SAVEDIR" detect complete.
+			info
+			else
+			die "Exit, detect file not made, check detect log files"
+		fi
+		info "make detect bedgraphs"
+		$command3
+		if [[ -d "$RUNPATH""$SAVEDIR"/"$OUTPUTNAME".detect.bedgraphs ]]; then
+        	info
+        	info "$RUNPATH""$SAVEDIR" detect bedgraphs saved.
+        else
+        	die "Exit, $OUTPUTNAME.detect.bedgraphs folder not found. Check bedgraphs logfile"
+        fi
+	fi	
 }
 
 # DESC: Function to run DNAscent 2.0 forkSense
@@ -325,22 +490,54 @@ function dnascent_fn() {
 # OUTS: StdErr saved to forkSense_output.txt
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function forksense_fn() {
-	touch "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
-	echo "DNAscent forkSense"
-	echo
-	DNAscent forkSense -d "$RUNPATH""$SAVEDIR"/"$NAME".detect -o "$RUNPATH""$SAVEDIR"/"$NAME".forkSense --markOrigins --markTerminations 2> "$RUNPATH""$SAVEDIR"/logfiles/forkSense_output.txt
+	local command1="touch ${RUNPATH}${SAVEDIR}/logfiles/forkSense_output.txt"
+	info "DNAscent forkSense"
+	info
+	local command2="DNAscent forkSense -d ${RUNPATH}${SAVEDIR}/${OUTPUTNAME}.detect \
+		-t $minimap_threads \
+		-o ${RUNPATH}${SAVEDIR}/${OUTPUTNAME}.forkSense --markOrigins --markTerminations \
+		2> ${RUNPATH}${SAVEDIR}/logfiles/forkSense_output.txt"
 	# to fix forksense save location bug
-	mv "$RUNPATH"origins_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
-	mv "$RUNPATH"terminations_DNAscent_forkSense.bed "$RUNPATH""$SAVEDIR"
+	local command3="mv ${RUNPATH}origins_DNAscent_forkSense.bed ${RUNPATH}${SAVEDIR}"
+	local command4="mv ${RUNPATH}terminations_DNAscent_forkSense.bed ${RUNPATH}${SAVEDIR}"
+	local command5="python ${python_utils_dir}/dnascent2bedgraph.py \
+		-f ${RUNPATH}${SAVEDIR}/${OUTPUTNAME}.forkSense \
+		-o ${RUNPATH}${SAVEDIR}/${OUTPUTNAME}.forksense.bedgraphs \
+		2> ${RUNPATH}${SAVEDIR}/logfiles/forkSense_bedgraph_output.txt"
 
-	if [[ -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense ]]; then
-		echo "$RUNPATH""$SAVEDIR" forksense complete.
-		echo
+	if [[ "$RUNSCRIPT" == "EI" ]]; then
+		jid16=$(sbatch -p ei-short --mem=64G -c 1 -J "EI16_touch" --wrap="$command1")
+#		jid17=$(sbatch -p ei-short --mem=256G -c 32 -o ${LOGFILESDIR}/forkSense_%j_%N.out -J "EI17_fork" --dependency=afterok:${last_jid##* }:${jid16##* } --wrap="$command2")
+		jid17=$(sbatch -p ei-medium --mem=64G -c 1 -o ${LOGFILESDIR}/forkSense_%j_%N.out -J "EI17_fork" --dependency=afterok:${last_jid##* }:${jid16##* } --wrap="$command2")
+		jid18=$(sbatch -p ei-short --mem=64G -c 1 -J "EI18_mv" --dependency=afterok:${jid17##* } --wrap="$command3")
+		jid19=$(sbatch -p ei-short --mem=64G -c 1 -J "EI19_mv" --dependency=afterok:${jid17##* } --wrap="$command4")
+#		jid20=$(sbatch -p ei-short  --mem=256G -c 32 -J "EI20_python" --dependency=afterok:${jid17##* } --wrap="$command5")
+		jid20=$(sbatch -p ei-medium  --mem=256G -c 1 -J "EI20_python" --dependency=afterok:${jid17##* } --wrap="$command5")
+   		jid_list+=(${jid16##* } ${jid17##* } ${jid18##* } ${jid19##* } ${jid20##* })
+		echo "EI: $jid16 $jid17 $jid18 $jid19 $jid20"
+    	last_jid=$jid20
 	else
-	die "Exit, forksense file not found, check forksense log file"
+		$command1
+		$command2
+		$command3
+		$command4
+
+		if [[ -f "$RUNPATH""$SAVEDIR"/"$OUTPUTNAME".forkSense ]]; then
+			info "$RUNPATH""$SAVEDIR" forksense complete.
+			info
+		else
+			die "Exit, forksense file not found, check forksense log file"
+		fi
+		info "make forksense bedgraphs"
+		$command5
+		if [[ -d "$RUNPATH""$SAVEDIR"/"$OUTPUTNAME".forksense.bedgraphs ]]; then
+			info
+			info "$RUNPATH""$SAVEDIR" forksense bedgraphs saved.
+		else
+			die "Exit, $OUTPUTNAME.forksense.bedgraphs folder not found. Check bedgraphs logfile"
+		fi
+
 	fi
-	echo "make forksense bedgraphs"
-	python "$python_utils_dir"/dnascent2bedgraph.py -f "$RUNPATH""$SAVEDIR"/"$NAME".forkSense -o "$RUNPATH""$SAVEDIR"/"$NAME".forksense.bedgraphs 2> "$RUNPATH"/"$SAVEDIR"/logfiles/forkSense_bedgraph_output.txt
 
 }
 
@@ -369,9 +566,9 @@ function script_init() {
 
 	# Set the bam file to be used with DNAscent dependent upon whether subregion requested
 	if [[ "$REGION" != "FALSE" || "$SUBSAMPLE" != "FALSE" ]]; then
-		BAM="$RUNPATH""$SAVEDIR"/"$NAME".bam
+		BAM="$RUNPATH""$SAVEDIR"/"$OUTPUTNAME".bam
 		else
-		BAM="$RUNPATH"alignments.sorted
+		BAM="$RUNPATH"alignments.sorted.bam
 	fi
 
 	# Set the location of fastq files as specified by user
@@ -384,10 +581,23 @@ function script_init() {
 	#make folders and files
  	mkdir "$RUNPATH""$SAVEDIR"
 	mkdir "$RUNPATH""$SAVEDIR"/logfiles
+	LOGFILESDIR="$RUNPATH""$SAVEDIR"/logfiles
 	touch "$RUNPATH""$SAVEDIR"/logfiles/index_output.txt "$RUNPATH""$SAVEDIR"/logfiles/detect_output.txt
 	touch "$RUNPATH""$SAVEDIR"/logfiles/bedgraph_output.txt
 
     readonly guppy_model="dna_r9.4.1_450bps_fast.cfg"			# guppy model to use for basecalling
+}
+
+# DESC: Script to output information to screen (if verbose) or summary file
+# ARGS: Informative text to output
+# OUTS: 
+# NOTE:
+function info() {
+	if [[ "$verbose" == true ]]; then
+	    echo "INFO: $@" 
+	else
+		echo "INFO: $@" > "$RUNPATH""$SAVEDIR"/logfiles/summary.txt 
+	fi
 }
 
 # DESC: Prints variables those variables that have been set, if verbose true
@@ -395,52 +605,23 @@ function script_init() {
 # OUTS: None
 # NOTE:
 function print_variables() {
-	if [[ "$verbose" == true ]]; then
-		echo Run script at $RUNSCRIPT
-		echo BASECALL and mapping = $BASECALL
-		echo MAPPING only = $MAPPING
-		echo FORKSENSE = $FORKSENSE
-		echo FAST5 = $FAST5
-		echo CHRBED = $CHRBED
-		echo RUNPATH = $RUNPATH
-		echo SAVEDIR = $SAVEDIR
-		echo REFGENOME = $REFGENOME
-		echo DETECTTHRESHOLD = $DETECTTHRESHOLD
-		echo NAME = $NAME
-		echo REGION = $REGION
-		echo SUBSAMPLE = $SUBSAMPLE
-		echo "BAM to use for detect" = $BAM
- 		echo "Fastq file to use" = $FASTQ
-		echo
-	fi
+	info Run script at $RUNSCRIPT
+	info BASECALL and mapping = $BASECALL
+	info MAPPING only = $MAPPING
+	info FORKSENSE = $FORKSENSE
+	info FAST5 = $FAST5
+	info RUNPATH = $RUNPATH
+	info SAVEDIR = $SAVEDIR
+	info REFGENOME = $REFGENOME
+	info DETECTTHRESHOLD = $DETECTTHRESHOLD
+	info NAME = $OUTPUTNAME
+	info REGION = $REGION
+	info SUBSAMPLE = $SUBSAMPLE
+	info "BAM to use for detect" = $BAM
+	info "Fastq file to use" = $FASTQ
+	info
 }
 
-# DESC: Script initialisation for use on Nieduszynski server at UoO
-# ARGS: None
-# OUTS: Exports locations for cuda libraries
-# NOTE: This is where to add anything specific to running on Nieduszynski server.
-function UoO_init() {
-	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
-	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
-	export PATH=/data/software_local/guppy_legacy/v3.6/bin:$PATH		# path to guppy
-	export PATH=/data/software_local/minimap2-2.10:$PATH		# path to minimap2
-	export PATH=/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin:$PATH				# path to DNAscent v2
-	readonly python_utils_dir="/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils"	# path to DNAscent v2 utilities
-	readonly guppy_model_dir="/data/software_local/guppy_legacy/v3.6/data/"										# path to guppy model files
-}
-
-# DESC: Script initialisation for use on EI HPC at NRP
-# ARGS: None
-# OUTS: Nothing yet
-# NOTE: This is where to add anything specific to running on the EI HPC.
-function EI_HPC_init() {
-	source package 0e96b5e6-3f41-4d6f-91cc-1b6d7ad05ef5			# guppy - 4.0.14
-	source package /tgac/software/testing/bin/minimap2-2.17		# minimap2 - 2.17
-	source package 758be80b-33cc-495a-9adc-11882ab145b1			# samtools - 1.10
-	source /ei/software/staging/CISSUPPORT-12154/stagingloader	# DNAscent - 2.0.2
-	readonly python_utils_dir="/ei/projects/a/ac9cb897-b4c0-44d0-a54b-2ddf13310bc4/data/scripts"	# path to DNAscent v2 utilities
-	readonly guppy_model_dir=""									# path to guppy model files - empty, since not required
-}
 
 ########################################################################
 # Main programme starts here
@@ -488,24 +669,24 @@ fi
 # Also generates bedgraphs from the detect files
 dnascent_fn
 
-if [[ -d "$RUNPATH""$SAVEDIR"/"$NAME".detect.bedgraphs ]]; then
-        echo
-        echo "$RUNPATH""$SAVEDIR" detect bedgraphs saved.
-        else
-        die "Exit, $NAME.detect.bedgraphs folder not found. Check bedgraphs logfile"
-fi
-
 # (optional) run (-f) DNAscent 2.0 forksense,
 # StdErr saved to forkSense_output.txt
 # Also generate bedgraphs from the forksense output
 if [[ "$FORKSENSE" == true ]]; then
 	forksense_fn
+fi
 
-	if [[ -d "$RUNPATH""$SAVEDIR"/"$NAME".forksense.bedgraphs ]]; then
-		echo
-		echo "$RUNPATH""$SAVEDIR" forksense bedgraphs saved.
-		else
-		die "Exit, $NAME.forksense.bedgraphs folder not found. Check bedgraphs logfile"
-	fi
+if [[ "$RUNSCRIPT" == "EI" ]]; then
+	command1="sacct -j "
+	delim=""
+	for item in "${jid_list[@]}"; do
+		command1="${command1}${delim}${item}"
+		delim=","
+	done
+	command1+=" --format=\"JobID,User,JobName,Partition,AllocCPUS,ExitCode,Elapsed,NNodes,NodeList\" -X"
+	echo EI: job summary:
+	echo EI: $command1
+	jid21=$(sbatch -p ei-short -J "EI21_slurm" --dependency=afterok:${last_jid##* } --wrap="$command1")
+
 fi
 
