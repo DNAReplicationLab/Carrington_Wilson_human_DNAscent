@@ -80,7 +80,7 @@ function UoO_init() {
 	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
 	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
 	export PATH=/data/software_local/guppy_legacy/v3.6/bin:$PATH		# path to guppy
-	export PATH=/data/software_local/minimap2-2.10:$PATH		# path to minimap2
+	export PATH=/data/software_local/minimap2-2.17:$PATH		# path to minimap2
 	export PATH=/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin:$PATH				# path to DNAscent v2
 	readonly python_utils_dir="/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils"	# path to DNAscent v2 utilities
 	readonly guppy_model_dir="/data/software_local/guppy_legacy/v3.6/data/"								# path to guppy model files
@@ -272,7 +272,7 @@ function basecall_fn() {
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
 		command3+="-x 'cuda:0,1' --disable_pings"
 	else
-		command3+="-x 'cuda:0'"
+		command3+=" -x cuda:0 "
 	fi
 	command3+=" > ${RUNPATH}${SAVEDIR}/logfiles/guppy_output.txt"
 
@@ -299,7 +299,7 @@ function basecall_fn() {
 		$command4
 		$command5
 		$command6
-		$command7
+		eval "$command7"
 		# check worked
 		if [[ -f "$RUNPATH"reads.fastq ]]; then
 			info "$RUNPATH fastq files generated and tidied"
