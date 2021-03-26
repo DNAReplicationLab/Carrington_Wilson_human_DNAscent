@@ -436,13 +436,8 @@ function dnascent_fn() {
 	info
 	info "DNAscent detect"
 	info
-	if [[ "$RUNSCRIPT" == "EI" ]]; then
-		local command2="DNAscent"
-	else
-		local command2="DNAscent"
-	fi
 
-	command2+=" detect -b ${BAM} -r ${REFGENOME} \
+	local command2="DNAscent detect -b ${BAM} -r ${REFGENOME} \
 		-i ${RUNPATH}index.dnascent -o ${RUNPATH}${SAVEDIR}/${OUTPUTNAME}.detect \
 		-t ${gpu_threads} --GPU 0 -l ${DETECTTHRESHOLD} \
 		2> ${RUNPATH}${SAVEDIR}/logfiles/detect_output.txt"
