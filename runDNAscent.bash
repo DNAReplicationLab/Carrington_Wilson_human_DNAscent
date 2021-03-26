@@ -268,8 +268,7 @@ function basecall_fn() {
 						${RUNPATH}${SAVEDIR}/logfiles/minimap_output.txt"
 
 	#use guppy to basecall fast5 files to generate fastq files, StdOut saved to guppy_ouput.txt
-	local command3="guppy_basecaller -i $FAST5 -s $RUNPATH "
-	command3+="-c $guppy_model_dir$guppy_model -r "
+	local command3="guppy_basecaller -i $FAST5 -s $RUNPATH -c $guppy_model_dir$guppy_model -r "
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
 		command3+="-x 'cuda:0,1' --disable_pings"
 	else
