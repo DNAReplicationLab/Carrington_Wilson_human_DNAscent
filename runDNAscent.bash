@@ -284,7 +284,6 @@ function basecall_fn() {
 	local command7="cat ${RUNPATH}fastq_files/*.fastq > ${RUNPATH}reads.fastq"
 
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
-		# IN PROGRESS: SLURM job submissions to go here
 		jid1=$(sbatch -p ei-short --mem=16G -c 1 -J "EI01_mkdir" --wrap="$command1")
 		jid2=$(sbatch -p ei-short --mem=16G -c 1 -J "EI02_touch" --wrap="$command2")
 		jid3=$(sbatch -p ei-gpu --gres=gpu:2 --mem=120G -J "EI03_guppy" --dependency=afterok:${jid2##* } --wrap="$command3")
@@ -335,7 +334,6 @@ function mapping_fn() {
 	local command5="rm ${RUNPATH}temp.alignments.sorted.bam ${RUNPATH}temp.alignments.sorted.bam.bai"
 
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
-		# IN PROGRESS: SLURM job submissions to go here
 		if [[ "$BASECALL" == true ]]; then
 			jid8=$(sbatch -p ei-short --mem=128G -c 32 -J "EI08_minimap" --dependency=afterok:${jid7##* } --wrap="$command1")
 #			jid8=$(sbatch -p ei-medium --mem=128G -c 32 -J "EI08_minimap" --dependency=afterok:${jid7##* } --wrap="$command1")
@@ -407,7 +405,7 @@ function sub_bam_fn() {
 # ARGS: None
 # OUTS: StdErr saved to detect_output.txt.
 # NOTE: If you chose to make a smaller region bam then DNAscent uses this bam.
-# NOTE: This still needs to be generalised and adapted for SLURM use
+# NOTE: Now adapted and tested for SLURM use
 function dnascent_fn() {
 	if [[ ! -f "$RUNPATH"index.dnascent ]]; then
 		info "DNAscent index"
@@ -417,7 +415,6 @@ function dnascent_fn() {
 			-o ${RUNPATH}index.dnascent \
 			2> ${RUNPATH}${SAVEDIR}/logfiles/index_output.txt"
 		if [[ "$RUNSCRIPT" == "EI" ]]; then
-			# TODO: SLURM job submissions to go here
 			echo "EI: DNAscent index..."
 			if [ -v ${last_jid+x} ]; then
 				echo "EI: no previous job"
@@ -456,7 +453,6 @@ function dnascent_fn() {
 		2> ${RUNPATH}${SAVEDIR}/logfiles/detect_bedgraph_output.txt"
 
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
-		# TODO: SLURM job submissions to go here
 		echo "EI: $command2"
 		jid14=$(sbatch -p ei-gpu --gres=gpu:1 -c 16 -x t128n90 -o ${LOGFILESDIR}/detect_%j_%N.out --mem=160G -J  "EI14_detect" --dependency=afterok:${last_jid##* } --wrap="$command2")
 #		jid15=$(sbatch -p ei-short --mem=256G -c 32 -o ${LOGFILESDIR}/python_%j_%N.out -J  "EI15_bedgraph" --dependency=afterok:${jid14##* } --wrap="$command3")
@@ -488,7 +484,7 @@ function dnascent_fn() {
 # DESC: Function to run DNAscent 2.0 forkSense
 # ARGS: None
 # OUTS: StdErr saved to forkSense_output.txt
-# NOTE: This still needs to be generalised and adapted for SLURM use
+# NOTE: Now adapted and tested for SLURM use
 function forksense_fn() {
 	local command1="touch ${RUNPATH}${SAVEDIR}/logfiles/forkSense_output.txt"
 	info "DNAscent forkSense"
