@@ -26,6 +26,13 @@ esac
                 shift
 done
 
+echo SAVEPATH = $SAVEPATH
+echo SAMPLES = $SAMPLES
+echo BLACKLIST = $BLACKLIST
+echo WINDOWS = $WINDOWS
+echo WINDOWNAME = $WINDOW
+echo CHROMSIZE = $CHROMSIZE
+
 echo "Generate bigwig files for samples in $SAMPLES and save at $SAVEPATH. Remove $BLACKLIST and map into $WINDOW size windows using $WINDOWSand $CHROMSIZE."
 
 # Porcess files listed in $SAMPLES

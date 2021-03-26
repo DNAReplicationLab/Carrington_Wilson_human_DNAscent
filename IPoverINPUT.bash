@@ -8,7 +8,7 @@
 
 # Collect command line arguments
 
-while [ $1 != "" ]; do
+while [ "$1" != "" ]; do
 	case $1 in
 		-o )	shift
 			SAVEPATH="$1" ;;
@@ -22,6 +22,12 @@ while [ $1 != "" ]; do
 		shift
 done
 
+echo SAVEPATH = $SAVEPATH
+echo FORJOIN = $FORJOIN
+echo WINDOW = $WINDOW
+echo CHROMSIZE = $CHROMSIZE
+echo
+
 echo "Generate IPoverINPUT bed files and bigwig files for window size $WINDOW samples in $FORJOIN and save at $SAVEPATH using $CHROMSIZE."
 echo
 
@@ -33,7 +39,8 @@ while read -r IP INPUT NAME; do
 	# Make new bed file with IPoverINPUT column
 	awk '{print $2, $3, $4, $5/$9}' "$SAVEPATH""$NAME".IPoverINPUT."$WINDOW".joined | sort -k 1,1 -k2,2n > "$SAVEPATH""$NAME".IPoverINPUT."$WINDOW".bed
 	# save bigwig
-	bedGraphToBigWig "$SAVEPATH""$NAME".IPoverINPUT."$WINDOW".bed "$CHROMSIZE" "$SAVEPATH""$NAME".IPoverINPUT."$WINDOW".bw
-	echo "$NAME joined bedfile, IPoverINPUT bedfile and BigWig saved"
+	#bedGraphToBigWig "$SAVEPATH""$NAME".IPoverINPUT."$WINDOW".bed "$CHROMSIZE" "$SAVEPATH""$NAME".IPoverINPUT."$WINDOW".bw
+	#echo "$NAME joined bedfile, IPoverINPUT bedfile and BigWig saved"
 	echo
 done < "$FORJOIN"
+
