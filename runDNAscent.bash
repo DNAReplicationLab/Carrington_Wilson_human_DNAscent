@@ -80,7 +80,7 @@ function UoO_init() {
 	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.1/lib64
 	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda/lib64
 	export PATH=/data/software_local/guppy_legacy/v3.6/bin:$PATH		# path to guppy
-	export PATH=/data/software_local/minimap2-2.10:$PATH		# path to minimap2
+	export PATH=/data/software_local/minimap2-2.17:$PATH		# path to minimap2
 	export PATH=/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/bin:$PATH				# path to DNAscent v2
 	readonly python_utils_dir="/home/nieduszynski/michael/development/DNAscent_v2/DNAscent_dev/utils"	# path to DNAscent v2 utilities
 	readonly guppy_model_dir="/data/software_local/guppy_legacy/v3.6/data/"								# path to guppy model files
@@ -238,7 +238,7 @@ function parse_params() {
 	fi
 
 	if [[ "$BASECALL" == "FALSE"  &&  "$MAPPING" == "FALSE" ]]; then
-		[[ ! -f "$RUNPATH"alignments.sorted.bam || ! -f "$RUNPATH"alignments.sorted.bai ]] \
+		[[ ! -f "$RUNPATH"alignments.sorted.bam || ! -f "$RUNPATH"alignments.sorted.bam.bai ]] \
 		&& die "If not basecalling and/or mapping, require indexed alignments.sorted.bam in -a directory"
 	fi
 
@@ -272,7 +272,7 @@ function basecall_fn() {
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
 		command3+="-x 'cuda:0,1' --disable_pings"
 	else
-		command3+="-x 'cuda:0'"
+		command3+=" -x cuda:0 "
 	fi
 	command3+=" > ${RUNPATH}${SAVEDIR}/logfiles/guppy_output.txt"
 
@@ -299,7 +299,7 @@ function basecall_fn() {
 		$command4
 		$command5
 		$command6
-		$command7
+		eval "$command7"
 		# check worked
 		if [[ -f "$RUNPATH"reads.fastq ]]; then
 			info "$RUNPATH fastq files generated and tidied"
@@ -317,16 +317,16 @@ function basecall_fn() {
 function mapping_fn() {
 	#use minimap to map reads to reference, StdErr saved to minimap_ouput.txt
 	local command1="minimap2 -ax map-ont -L --eqx -t $minimap_threads $REFGENOME $FASTQ \
-		2> ${RUNPATH}${SAVEDIR}/logfiles/minimap_output.txt \
-		| samtools sort -@ $minimap_threads - -o ${RUNPATH}temp.alignments.sorted.bam"
+	2> ${RUNPATH}${SAVEDIR}/logfiles/minimap_output.txt \
+	| samtools sort -@ $minimap_threads - -o ${RUNPATH}temp.alignments.sorted.bam"
 
 #		| samtools view -@ $minimap_threads -Sb - \
 
 	local command2="samtools index -@ $minimap_threads ${RUNPATH}temp.alignments.sorted.bam"
- 
+
 	#filter out supplementary alignments and alignments mapping to scaffolds
 	local command3="samtools view -@ $minimap_threads -buh -F 2048 -M -L $CHRBED ${RUNPATH}temp.alignments.sorted.bam \
-                | samtools sort -@ $minimap_threads - -o ${RUNPATH}alignments.sorted.bam"
+        | samtools sort -@ $minimap_threads - -o ${RUNPATH}alignments.sorted.bam"
 
 	local command4="samtools index -@ $minimap_threads ${RUNPATH}alignments.sorted.bam"
 
@@ -352,9 +352,9 @@ function mapping_fn() {
 	 	echo "EI: $jid8 $jid9 $jid10 $jid11 $jid12"
     	last_jid=$jid11
 	else
-		$command1
+		eval "$command1"
 		$command2
-    	$command3
+	eval "$command3"
     	$command4
     	$command5
 		if [[ -f "$RUNPATH"alignments.sorted.bam ]] ; then
@@ -380,7 +380,7 @@ function regional_bam_fn() {
 	else
 		$command1
 		$command2
-	fi	
+	fi
 }
 
 # DESC: subsample bam file to fraction of original size (-s flag)
@@ -397,7 +397,7 @@ function sub_bam_fn() {
 	else
 		$command1
 		$command2
-	fi	
+	fi
 }
 
 # DESC: Function to run DNAscent 2.0 detect (and index if necessary)
@@ -428,8 +428,8 @@ function dnascent_fn() {
 			echo "EI: $jid13"
 	    	last_jid=$jid13
 		else
-			$command1
-		fi	
+			eval "$command1"
+		fi
 	fi
 
 	info
@@ -456,7 +456,7 @@ function dnascent_fn() {
     	last_jid=$jid14
 
 	else
-		$command2
+		eval "$command2"
 
 		if [[ -f "$RUNPATH""$SAVEDIR"/"$OUTPUTNAME".detect ]] ; then
 			info "$RUNPATH""$SAVEDIR" detect complete.
@@ -465,14 +465,14 @@ function dnascent_fn() {
 			die "Exit, detect file not made, check detect log files"
 		fi
 		info "make detect bedgraphs"
-		$command3
+		eval "$command3"
 		if [[ -d "$RUNPATH""$SAVEDIR"/"$OUTPUTNAME".detect.bedgraphs ]]; then
         	info
         	info "$RUNPATH""$SAVEDIR" detect bedgraphs saved.
         else
         	die "Exit, $OUTPUTNAME.detect.bedgraphs folder not found. Check bedgraphs logfile"
         fi
-	fi	
+	fi
 }
 
 # DESC: Function to run DNAscent 2.0 forkSense
@@ -508,7 +508,7 @@ function forksense_fn() {
     	last_jid=$jid20
 	else
 		$command1
-		$command2
+		eval "$command2"
 		$command3
 		$command4
 
@@ -519,7 +519,7 @@ function forksense_fn() {
 			die "Exit, forksense file not found, check forksense log file"
 		fi
 		info "make forksense bedgraphs"
-		$command5
+		eval "$command5"
 		if [[ -d "$RUNPATH""$SAVEDIR"/"$OUTPUTNAME".forksense.bedgraphs ]]; then
 			info
 			info "$RUNPATH""$SAVEDIR" forksense bedgraphs saved.
