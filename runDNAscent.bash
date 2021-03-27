@@ -483,11 +483,13 @@ function forksense_fn() {
 	local command1="touch ${RUNPATH}${SAVEDIR}/logfiles/forkSense_output.txt"
 	info "DNAscent forkSense"
 	info
-	local command2="DNAscent forkSense -d ${RUNPATH}${SAVEDIR}/${OUTPUTNAME}.detect \
+	# cd before command, so that forkSense is run in $RUNSPATH, and back afterwards
+	local command2="cd ${RUNPATH} && DNAscent forkSense -d ${SAVEDIR}/${OUTPUTNAME}.detect \
 		-t $minimap_threads \
-		-o ${RUNPATH}${SAVEDIR}/${OUTPUTNAME}.forkSense --markOrigins --markTerminations \
-		2> ${RUNPATH}${SAVEDIR}/logfiles/forkSense_output.txt"
-	# to fix forksense save location bug
+		-o ${SAVEDIR}/${OUTPUTNAME}.forkSense --markOrigins --markTerminations \
+		2> ${SAVEDIR}/logfiles/forkSense_output.txt \
+		&& cd $orig_cwd"
+	# to fix forksense save location bug - attempt 1!
 	local command3="mv ${RUNPATH}origins_DNAscent_forkSense.bed ${RUNPATH}${SAVEDIR}"
 	local command4="mv ${RUNPATH}terminations_DNAscent_forkSense.bed ${RUNPATH}${SAVEDIR}"
 	local command5="python ${python_utils_dir}/dnascent2bedgraph.py \
