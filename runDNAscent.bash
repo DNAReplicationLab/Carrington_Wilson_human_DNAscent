@@ -372,8 +372,8 @@ function mapping_fn() {
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function regional_bam_fn() {
 	local command1="samtools view -h -b -M -L \"$REGION\" \
-		-o \"$RUNPATH\"\"$SAVEDIR\"/\"$OUTPUTNAME\".bam \"$RUNPATH\"alignments.sorted.bam"
-	local command2="samtools index \"$RUNPATH\"\"$SAVEDIR\"/\"$OUTPUTNAME\".bam"
+	-o ${RUNPATH}${SAVEDIR}/${OUTPUTNAME}.bam ${RUNPATH}alignments.sorted.bam"
+	local command2="samtools index ${RUNPATH}${SAVEDIR}/${OUTPUTNAME}.bam"
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
 		# TODO: SLURM job submissions to go here
 		:
@@ -388,9 +388,9 @@ function regional_bam_fn() {
 # OUTS: None
 # NOTE: This still needs to be generalised and adapted for SLURM use
 function sub_bam_fn() {
-	local command1="samtools view -h -b -s \"$SUBSAMPLE\" \
-		-o \"$RUNPATH\"\"$SAVEDIR\"/\"$OUTPUTNAME\".bam \"$RUNPATH\"alignments.sorted.bam"
-    local command2="samtools index \"$RUNPATH\"\"$SAVEDIR\"/\"$OUTPUTNAME\".bam"
+	local command1="samtools view -h -b -s ${SUBSAMPLE} \
+		-o ${RUNPATH}${SAVEDIR}/${OUTPUTNAME}.bam ${RUNPATH}alignments.sorted.bam"
+    local command2="samtools index ${RUNPATH}${SAVEDIR}/${OUTPUTNAME}.bam"
 	if [[ "$RUNSCRIPT" == "EI" ]]; then
 		# TODO: SLURM job submissions to go here
 		:
