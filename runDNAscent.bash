@@ -604,7 +604,7 @@ function print_variables() {
 	info SAVEDIR = $SAVEDIR
 	info REFGENOME = $REFGENOME
 	info DETECTTHRESHOLD = $DETECTTHRESHOLD
-	info NAME = $OUTPUTNAME
+	info OUTPUTNAME = $OUTPUTNAME
 	info REGION = $REGION
 	info SUBSAMPLE = $SUBSAMPLE
 	info "BAM to use for detect" = $BAM
