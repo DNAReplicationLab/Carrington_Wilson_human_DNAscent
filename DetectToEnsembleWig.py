@@ -56,7 +56,7 @@ for line in f:
 
 		splitLine = line.rstrip().split('\t')
 		coverage[MyChromosome-1][int(splitLine[0])//SmallWindow] += 1
-		if float(splitLine[1]) > threshold:
+		if float(splitLine[1]) >= threshold:
 
 			BrdUCalls[MyChromosome-1][int(splitLine[0])//SmallWindow] += 1
 
