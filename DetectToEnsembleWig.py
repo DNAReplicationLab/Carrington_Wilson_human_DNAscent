@@ -6,10 +6,12 @@
 # not, please Email the author.
 #----------------------------------------------------------
 
-# Usage: python DetectToEnsembleWig.py path/to/input/detect/file window_in_kb path/for/output/wig/file
+# Usage: python DetectToEnsembleWig.py path/to/input/detect/file window_in_kb path/for/output/files path/to/nascent/bed/file
 # example command:
-# python DetectToEnsembleWig.py test.detect 100 test.wig
+# python DetectToEnsembleWig.py test.detect 100 output_file_directory nascent.bed
+# requires python 3.3+
 
+import os
 import sys
 import numpy as np
 
@@ -17,10 +19,42 @@ chromosomes = 24
 maxLength = 248956422 // 1000
 
 BrdUCalls = np.zeros(shape=(chromosomes,maxLength))
+nascentBrdUCalls = np.zeros(shape=(chromosomes,maxLength))
 coverage = np.zeros(shape=(chromosomes,maxLength))
+nascentCoverage = np.zeros(shape=(chromosomes,maxLength))
 threshold = 0.5
 SmallWindow = 1000
 LargeWindow = int(sys.argv[2])
+OutputPath = str(sys.argv[3])
+BEDfile = str(sys.argv[4])
+allReadsBEDfile = os.path.join(OutputPath, "AllReadsEnsemble.bed")
+allReadsWIGfile = os.path.join(OutputPath, "AllReadsEnsemble.wig")
+nascentReadsBEDfile = os.path.join(OutputPath, "NascentReadsEnsemble.bed")
+nascentReadsWIGfile = os.path.join(OutputPath, "NascentReadsEnsemble.wig")
+nascentReadIDs = []
+nascent = False
+
+print("Will generate file:", allReadsBEDfile, allReadsWIGfile, nascentReadsBEDfile, nascentReadsWIGfile)
+
+try:
+    os.makedirs(OutputPath)
+except FileExistsError:
+    # directory already exists
+    pass
+
+print("Reading nascent BED file...")
+
+# open file in read mode
+f = open(BEDfile, 'r')
+for row in f:
+	splitLine = row.rstrip().split('\t')
+	try:
+		nascentReadIDs.append(splitLine[3])
+	except:
+		continue
+f.close()
+
+print("Reading detect file...")
 
 #import detect data
 f = open(sys.argv[1],'r')
@@ -36,7 +70,10 @@ for line in f:
 		splitLine = line.rstrip().split(' ')
 		readID = splitLine[0][1:]
 		chromosome = splitLine[1]
-# 		print(chromosome)
+		if readID in nascentReadIDs:
+			nascent = True
+		else:
+			nascent = False
 		continue
 
 
@@ -56,25 +93,34 @@ for line in f:
 
 		splitLine = line.rstrip().split('\t')
 		coverage[MyChromosome-1][int(splitLine[0])//SmallWindow] += 1
+		if nascent:
+			nascentCoverage[MyChromosome-1][int(splitLine[0])//SmallWindow] += 1
+			if float(splitLine[1]) >= threshold:
+				nascentBrdUCalls[MyChromosome-1][int(splitLine[0])//SmallWindow] += 1
+			
 		if float(splitLine[1]) >= threshold:
-
 			BrdUCalls[MyChromosome-1][int(splitLine[0])//SmallWindow] += 1
 
 #export the ensemble data as a wig file
 ensembleBrdU = np.zeros(shape=(chromosomes,maxLength))
+nascentEnsembleBrdU = np.zeros(shape=(chromosomes,maxLength))
 
-f = open(sys.argv[3],'w')
-f2 = open(sys.argv[4],'w')
+print("Writing files")
+
+f1 = open(allReadsWIGfile,'w')
+f2 = open(allReadsBEDfile,'w')
+f3 = open(nascentReadsWIGfile,'w')
+f4 = open(nascentReadsBEDfile,'w')
 for chromo in range(len(ensembleBrdU)):
 	if chromo < 23:
 		myChromo = chromo + 1
-		f.write('variableStep chrom=chr{}'.format(chromo+1) + '\n')
+		f1.write('variableStep chrom=chr{}'.format(chromo+1) + '\n')
 	elif chromo == 23:
 		myChromo = 'X'
-		f.write('variableStep chrom=chrX' + '\n')
+		f1.write('variableStep chrom=chrX' + '\n')
 	elif chromo == 24:
 		myChromo = 'Y'
-		f.write('variableStep chrom=chrY' + '\n')
+		f1.write('variableStep chrom=chrY' + '\n')
 	
 	for i in range( 0, maxLength, LargeWindow ):
 
@@ -82,10 +128,36 @@ for chromo in range(len(ensembleBrdU)):
 			continue
 		else:
 			ensembleBrdU[chromo][i + LargeWindow//2] = float(sum( BrdUCalls[chromo][i:i+1000] )) / float(sum( coverage[chromo][i:i+1000]))
-			f.write(str((i + LargeWindow//2)*1000) + '\t' + str("%.3f" % ensembleBrdU[chromo][i + LargeWindow//2]) + '\n')
+			f1.write(str((i + LargeWindow//2)*1000) + '\t' + str("%.3f" % ensembleBrdU[chromo][i + LargeWindow//2]) + '\n')
 			f2.write('chr' + str(myChromo) + '\t' + str((i - LargeWindow//2)*1000) + '\t' + str((i + LargeWindow//2)*1000) + '\t' + str("%.3f" % ensembleBrdU[chromo][i + LargeWindow//2]) + '\n')
-f.close()
+f1.close()
 f2.close()
+
+f3 = open(nascentReadsWIGfile,'w')
+f4 = open(nascentReadsBEDfile,'w')
+for chromo in range(len(nascentEnsembleBrdU)):
+	if chromo < 23:
+		myChromo = chromo + 1
+		f3.write('variableStep chrom=chr{}'.format(chromo+1) + '\n')
+	elif chromo == 23:
+		myChromo = 'X'
+		f3.write('variableStep chrom=chrX' + '\n')
+	elif chromo == 24:
+		myChromo = 'Y'
+		f3.write('variableStep chrom=chrY' + '\n')
+	
+	for i in range( 0, maxLength, LargeWindow ):
+
+		if float(sum( nascentCoverage[chromo][i:i+LargeWindow])) == 0.0:
+			continue
+		else:
+			nascentEnsembleBrdU[chromo][i + LargeWindow//2] = float(sum( nascentBrdUCalls[chromo][i:i+1000] )) / float(sum( nascentCoverage[chromo][i:i+1000]))
+			f3.write(str((i + LargeWindow//2)*1000) + '\t' + str("%.3f" % nascentEnsembleBrdU[chromo][i + LargeWindow//2]) + '\n')
+			f4.write('chr' + str(myChromo) + '\t' + str((i - LargeWindow//2)*1000) + '\t' + str((i + LargeWindow//2)*1000) + '\t' + str("%.3f" % nascentEnsembleBrdU[chromo][i + LargeWindow//2]) + '\n')
+
+f3.close()
+f4.close()
+
 
 # yBrdUSmooth = np.convolve(yBrdU, np.ones((10,))/10, mode='same')
 # 
