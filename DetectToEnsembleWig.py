@@ -34,6 +34,7 @@ for line in f:
 	if line[0] == '>':
 
 		splitLine = line.rstrip().split(' ')
+		readID = splitLine[0][1:]
 		chromosome = splitLine[1]
 # 		print(chromosome)
 		continue
