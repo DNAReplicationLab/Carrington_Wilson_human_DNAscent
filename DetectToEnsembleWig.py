@@ -136,13 +136,13 @@ f2.close()
 f3 = open(nascentReadsWIGfile,'w')
 f4 = open(nascentReadsBEDfile,'w')
 for chromo in range(len(nascentEnsembleBrdU)):
-	if chromo < 23:
+	if chromo < 22:
 		myChromo = chromo + 1
 		f3.write('variableStep chrom=chr{}'.format(chromo+1) + '\n')
-	elif chromo == 23:
+	elif chromo == 22:
 		myChromo = 'X'
 		f3.write('variableStep chrom=chrX' + '\n')
-	elif chromo == 24:
+	elif chromo == 23:
 		myChromo = 'Y'
 		f3.write('variableStep chrom=chrY' + '\n')
 	
