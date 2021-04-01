@@ -127,9 +127,9 @@ for chromo in range(len(ensembleBrdU)):
 		if float(sum( coverage[chromo][i:i+LargeWindow-1])) == 0.0:
 			continue
 		else:
-			ensembleBrdU[chromo][i + LargeWindow//2] = float(sum( BrdUCalls[chromo][i:i+LargeWindow-1] )) / float(sum( coverage[chromo][i:i+LargeWindow-1]))
-			f1.write(str((i + LargeWindow//2)*1000) + '\t' + str("%.3f" % ensembleBrdU[chromo][i + LargeWindow//2]) + '\n')
-			f2.write('chr' + str(myChromo) + '\t' + str((i - LargeWindow//2)*1000) + '\t' + str((i + LargeWindow//2)*1000) + '\t' + str("%.3f" % ensembleBrdU[chromo][i + LargeWindow//2]) + '\n')
+			ensembleBrdU[chromo][i] = float(sum( BrdUCalls[chromo][i:i+LargeWindow-1] )) / float(sum( coverage[chromo][i:i+LargeWindow-1]))
+			f1.write(str((i + LargeWindow//2)*1000) + '\t' + str("%.3f" % ensembleBrdU[chromo][i]) + '\n')
+			f2.write('chr' + str(myChromo) + '\t' + str(i * 1000) + '\t' + str(((i + LargeWindow)*1000)-1) + '\t' + str("%.3f" % ensembleBrdU[chromo][i]) + '\n')
 f1.close()
 f2.close()
 
@@ -151,9 +151,9 @@ for chromo in range(len(nascentEnsembleBrdU)):
 		if float(sum( nascentCoverage[chromo][i:i+LargeWindow-1])) == 0.0:
 			continue
 		else:
-			nascentEnsembleBrdU[chromo][i + LargeWindow//2] = float(sum( nascentBrdUCalls[chromo][i:i+LargeWindow-1] )) / float(sum( nascentCoverage[chromo][i:i+LargeWindow-1]))
-			f3.write(str((i + LargeWindow//2)*1000) + '\t' + str("%.3f" % nascentEnsembleBrdU[chromo][i + LargeWindow//2]) + '\n')
-			f4.write('chr' + str(myChromo) + '\t' + str((i - LargeWindow//2)*1000) + '\t' + str((i + LargeWindow//2)*1000) + '\t' + str("%.3f" % nascentEnsembleBrdU[chromo][i + LargeWindow//2]) + '\n')
+			nascentEnsembleBrdU[chromo][i] = float(sum( nascentBrdUCalls[chromo][i:i+LargeWindow-1] )) / float(sum( nascentCoverage[chromo][i:i+LargeWindow-1]))
+			f3.write(str((i + LargeWindow//2)*1000) + '\t' + str("%.3f" % nascentEnsembleBrdU[chromo][i]) + '\n')
+			f4.write('chr' + str(myChromo) + '\t' + str(i*1000) + '\t' + str(((i + LargeWindow)*1000)-1) + '\t' + str("%.3f" % nascentEnsembleBrdU[chromo][i]) + '\n')
 
 f3.close()
 f4.close()
