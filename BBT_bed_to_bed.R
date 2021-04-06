@@ -3,13 +3,20 @@
 #Modifications by Conrad A. Nieduszynski (Earlham Instutute)
 #Usage
 args = commandArgs(trailingOnly = TRUE)
-chunk_directory <- args[2]
-save_directory <- args[3]
-window <- as.numeric(args[4])
-step <- as.numeric(args[5])
-threshold <- as.numeric(args[6])
-export_mode <- args[7]
-ROI_directory <- args[8]
+if (length(args)<5) {
+  stop("At least five arguments must be supplied (input directory, output directory, window size, step size, threshold ).n", call.=FALSE)
+} else if (length(args)==5) {
+  # default export mode
+  args[6] = "FALSE"
+}
+print(args)
+chunk_directory <- args[1]
+save_directory <- args[2]
+window <- as.numeric(args[3])
+step <- as.numeric(args[4])
+threshold <- as.numeric(args[5])
+export_mode <- args[6]
+ROI_directory <- args[7]
 file_list <- list.files(chunk_directory, pattern = "bedgraph", full.names = TRUE, recursive = TRUE)
 headers <- sapply(file_list, scan, what = "character", nlines = 1, sep = " ", quiet = TRUE)
 headers2 <- sapply(file_list, scan, what = "character", nlines = 1, skip=1, sep = " ", quiet = TRUE)
