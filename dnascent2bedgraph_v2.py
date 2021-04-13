@@ -87,9 +87,12 @@ def parseArguments(args):
 
 
 #--------------------------------------------------------------------------------------------------------------------------------------
-def makeDetectLine(line, chromosome):
+def makeDetectLine(line, chromosome, strand):
 	splitLine = line.rstrip().split()
-	pos = int(splitLine[0])
+	if strand == 'rev':
+		pos = int(splitLine[0]) + 5
+	else:
+		pos = int(splitLine[0])	
 	probBrdU = float(splitLine[1])
 	sixMer = splitLine[2]
 	return chromosome + ' ' + str(pos) + ' ' + str(pos+1) + ' ' + str(probBrdU) + '\n'
@@ -200,7 +203,7 @@ def parseBaseFile(fname, args):
 		else:
 
 			if fname[1] == "detect":
-				buff.append( makeDetectLine(line,chromosome) )
+				buff.append( makeDetectLine(line,chromosome,strand) )
 			elif fname[1] == "regions":
 				buff.append( makeRegionsLine(line,chromosome) )
 			elif fname[1] == "sense":

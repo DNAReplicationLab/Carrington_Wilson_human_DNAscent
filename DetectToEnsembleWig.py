@@ -128,8 +128,8 @@ for chromo in range(len(ensembleBrdU)):
 			continue
 		else:
 			ensembleBrdU[chromo][i] = float(sum( BrdUCalls[chromo][i:i+LargeWindow-1] )) / float(sum( coverage[chromo][i:i+LargeWindow-1]))
-			f1.write(str((i + LargeWindow//2)*1000) + '\t' + str("%.3f" % ensembleBrdU[chromo][i]) + '\n')
-			f2.write('chr' + str(myChromo) + '\t' + str(i * 1000) + '\t' + str(((i + LargeWindow)*1000)-1) + '\t' + str("%.3f" % ensembleBrdU[chromo][i]) + '\n')
+			f1.write(str((i + LargeWindow//2)*1000) + '\t' + str(ensembleBrdU[chromo][i]) + '\n')
+			f2.write('chr' + str(myChromo) + '\t' + str(i * 1000) + '\t' + str(((i + LargeWindow)*1000)-1) + '\t' + str(ensembleBrdU[chromo][i]) + '\n')
 f1.close()
 f2.close()
 
@@ -152,8 +152,8 @@ for chromo in range(len(nascentEnsembleBrdU)):
 			continue
 		else:
 			nascentEnsembleBrdU[chromo][i] = float(sum( nascentBrdUCalls[chromo][i:i+LargeWindow-1] )) / float(sum( nascentCoverage[chromo][i:i+LargeWindow-1]))
-			f3.write(str((i + LargeWindow//2)*1000) + '\t' + str("%.3f" % nascentEnsembleBrdU[chromo][i]) + '\n')
-			f4.write('chr' + str(myChromo) + '\t' + str(i*1000) + '\t' + str(((i + LargeWindow)*1000)-1) + '\t' + str("%.3f" % nascentEnsembleBrdU[chromo][i]) + '\n')
+			f3.write(str((i + LargeWindow//2)*1000) + '\t' + str(nascentEnsembleBrdU[chromo][i]) + '\n')
+			f4.write('chr' + str(myChromo) + '\t' + str(i*1000) + '\t' + str(((i + LargeWindow)*1000)-1) + '\t' + str(nascentEnsembleBrdU[chromo][i]) + '\n')
 
 f3.close()
 f4.close()
